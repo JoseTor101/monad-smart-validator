@@ -105,11 +105,44 @@ export const SAMPLE_POSTS: SamplePost[] = [
   },
 ];
 
-// Per-topic counts for the discovery bento.
+// Per-topic counts for the discovery list.
 export function topicCounts(): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const p of SAMPLE_POSTS) counts[p.topic] = (counts[p.topic] ?? 0) + 1;
   return counts;
+}
+
+// A per-field summary row for the Discovery list: count, the most recent
+// post's seal + title, and how long ago it was registered.
+export interface FieldSummary {
+  count: number;
+  seal: SealState | null;
+  latestTitle: string | null;
+  latestAt: number | null;
+}
+
+export function topicSummary(slug: string): FieldSummary {
+  const posts = SAMPLE_POSTS.filter((p) => p.topic === slug).sort(
+    (a, b) => b.createdAt - a.createdAt
+  );
+  const latest = posts[0];
+  return {
+    count: posts.length,
+    seal: latest?.seal ?? null,
+    latestTitle: latest?.title ?? null,
+    latestAt: latest?.createdAt ?? null,
+  };
+}
+
+const SEAL_WORD: Record<SealState, string> = {
+  verified: "Verified",
+  contested: "Under review",
+  disputed: "Disputed",
+  pending: "Awaiting validation",
+};
+
+export function sealWord(seal: SealState | null): string {
+  return seal ? SEAL_WORD[seal] : "Nothing yet";
 }
 
 export const SAMPLE_PROFILE = {

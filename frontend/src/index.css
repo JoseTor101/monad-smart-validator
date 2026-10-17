@@ -1,31 +1,50 @@
 /* =========================================================================
-   SmartValidator — design system
+   SmartValidator — design system (refreshed)
    Subject: content provenance / authorship / community truth on Monad.
-   Palette is the brief's own; teal is reserved as the semantic "verified"
-   signal and never used as decoration.
+
+   Refresh per wip/design-system-brief.md + R1 "Neutral ground":
+   - Grounds, surfaces, borders and ink are TRUE NEUTRAL (no violet tint),
+     so the one real violet (the action) and teal (verified) stand out.
+   - Teal is semantic only: verified / trust. Never decorative.
+   - Radius drops to 8px controls / 12px panels. No background glows,
+     no gradient washes on tiles. Field hue shrinks to an 8px dot.
+   - Paper (--paper) is reserved for the provenance record card.
+   - Light mode is a full theme via [data-theme="light"]; it keeps the
+     same semantics (teal switches to --teal-ink for contrast on light).
    ========================================================================= */
 
 :root {
-  /* Palette */
+  /* ---- Signal colors (shared across themes) ---- */
   --violet: #6c4df5;
-  --violet-deep: #4528c2;
+  --violet-hover: #5a3be6;
   --violet-soft: #b4a6ff;
   --teal: #22c5a8;
-  --night: #0f0b24;
-  --surface: #1c1638;
-  --mist: #f6f4ff;
+  --teal-ink: #08705d; /* verified text on light/paper surfaces */
   --warning: #f2b544;
   --risk: #ef5a6f;
 
-  /* Derived surfaces */
-  --surface-2: #241d47;
-  --line: #2e2656;
-  --line-soft: #241d47;
-  --ink: #ece9ff;
-  --ink-dim: #a99fd6;
-  --ink-faint: #6f6799;
+  /* ---- Dark theme ground + ink (default) ---- */
+  --night: #0b0b0f; /* page background base */
+  --surface: #141419; /* panels, inputs */
+  --surface-2: #1c1c23; /* hover, tracks, selected */
+  --line: #26262e; /* borders, dividers */
+  --line-strong: #34343e; /* input borders, hover */
+  --ink: #f2f2f5; /* headings */
+  --ink-body: #d6d6dc; /* body text */
+  --ink-dim: #a0a0ab; /* secondary */
+  --ink-faint: #82828e; /* tertiary / meta */
 
-  /* Type */
+  /* Paper surface (provenance record only) */
+  --paper: #edeef1;
+  --paper-ink: #1a1a1f;
+  --paper-dim: #5a5a66;
+  --paper-line: #d7d8de;
+
+  /* Link + verified-on-dark */
+  --link: var(--violet-soft);
+  --verified-ink: var(--teal);
+
+  /* ---- Type ---- */
   --display: "Space Grotesk", system-ui, sans-serif;
   --body: "Inter", system-ui, sans-serif;
   --mono: "Space Mono", ui-monospace, monospace;
@@ -40,9 +59,40 @@
   --t-2xl: 3.4rem;
   --t-3xl: 4.6rem;
 
-  --radius: 14px;
-  --radius-lg: 22px;
+  /* ---- Shape ---- */
+  --radius: 8px; /* controls, inputs, small cards */
+  --radius-lg: 12px; /* panels, tiles, modals */
   --maxw: 1180px;
+
+  color-scheme: dark;
+}
+
+/* =========================================================================
+   LIGHT THEME — same token names, inverted ground/ink.
+   Teal as a fill still works; teal as *text* uses --teal-ink for contrast.
+   ========================================================================= */
+[data-theme="light"] {
+  --night: #ffffff;
+  --surface: #f6f6f8;
+  --surface-2: #ececf0;
+  --line: #e2e2e8;
+  --line-strong: #cfcfd8;
+  --ink: #101014;
+  --ink-body: #2c2c34;
+  --ink-dim: #5b5b66;
+  --ink-faint: #82828e;
+
+  /* On light, the provenance card inverts to a dark "receipt" so it still
+     reads as the one thing worth staring at. */
+  --paper: #141419;
+  --paper-ink: #f2f2f5;
+  --paper-dim: #a0a0ab;
+  --paper-line: #2a2a32;
+
+  --link: var(--violet-hover);
+  --verified-ink: var(--teal-ink);
+
+  color-scheme: light;
 }
 
 * {
@@ -59,13 +109,10 @@ body {
   font-family: var(--body);
   font-size: var(--t-base);
   line-height: 1.55;
-  color: var(--ink);
-  background: var(--night);
-  background-image:
-    radial-gradient(900px 500px at 85% -5%, rgba(108, 77, 245, 0.22), transparent 60%),
-    radial-gradient(700px 500px at 5% 10%, rgba(34, 197, 168, 0.1), transparent 55%);
-  background-attachment: fixed;
+  color: var(--ink-body);
+  background: var(--night); /* flat neutral ground — no radial glows */
   min-height: 100vh;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 h1, h2, h3, h4 {
@@ -74,14 +121,15 @@ h1, h2, h3, h4 {
   line-height: 1.05;
   letter-spacing: -0.02em;
   margin: 0;
+  color: var(--ink);
 }
 
 a {
-  color: var(--violet-soft);
+  color: var(--link);
   text-decoration: none;
 }
 a:hover {
-  color: var(--mist);
+  color: var(--ink);
 }
 
 button {
@@ -91,7 +139,7 @@ button {
 
 ::selection {
   background: var(--violet);
-  color: white;
+  color: #fff;
 }
 
 /* --- Layout shell -------------------------------------------------------- */
@@ -108,8 +156,8 @@ button {
   z-index: 20;
   width: 100%;
   backdrop-filter: blur(12px);
-  background: linear-gradient(to bottom, rgba(15, 11, 36, 0.92), rgba(15, 11, 36, 0.6));
-  border-bottom: 1px solid var(--line-soft);
+  background: color-mix(in srgb, var(--night) 82%, transparent);
+  border-bottom: 1px solid var(--line);
 }
 
 .topbar-inner {
@@ -129,7 +177,7 @@ button {
   font-weight: 700;
   font-size: var(--t-md);
   letter-spacing: -0.03em;
-  color: var(--mist);
+  color: var(--ink);
 }
 
 .brand .seal-mark {
@@ -151,19 +199,45 @@ button {
   font-size: var(--t-sm);
   font-weight: 500;
   padding: 8px 14px;
-  border-radius: 9px;
+  border-radius: var(--radius);
   transition: color 0.15s, background 0.15s;
 }
 .nav button:hover {
   color: var(--ink);
 }
 .nav button[data-active="true"] {
-  color: var(--mist);
-  background: var(--surface);
+  color: var(--ink);
+  background: var(--surface-2);
 }
 
 .topbar .spacer {
   flex: 1;
+}
+
+/* --- Theme toggle -------------------------------------------------------- */
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-dim);
+  transition: color 0.15s, border-color 0.15s, transform 0.05s;
+}
+.theme-toggle:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.theme-toggle:active {
+  transform: scale(0.94);
+}
+.theme-toggle svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* --- Wallet pill --------------------------------------------------------- */
@@ -198,13 +272,13 @@ button {
 /* --- Buttons ------------------------------------------------------------- */
 
 .btn {
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: var(--surface);
   color: var(--ink);
   font-size: var(--t-sm);
   font-weight: 500;
   padding: 11px 18px;
-  border-radius: 11px;
+  border-radius: var(--radius);
   transition: border-color 0.15s, background 0.15s, transform 0.05s;
 }
 .btn:hover:not(:disabled) {
@@ -220,11 +294,11 @@ button {
 .btn-primary {
   background: var(--violet);
   border-color: var(--violet);
-  color: white;
+  color: #fff;
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--violet-deep);
-  border-color: var(--violet-deep);
+  background: var(--violet-hover);
+  border-color: var(--violet-hover);
 }
 .btn-teal {
   background: var(--teal);
@@ -234,31 +308,83 @@ button {
 }
 .btn-ghost {
   background: transparent;
+  border-color: var(--line);
 }
 
 /* --- Hero ---------------------------------------------------------------- */
 
 .hero {
   padding: 56px 0 44px;
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line);
   margin-bottom: 40px;
+}
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 48px;
+  align-items: center;
 }
 .hero h1 {
   padding-top: 4px; /* guard against display font ascender clipping */
-}
-.hero h1 {
-  font-size: var(--t-3xl);
-  max-width: 14ch;
+  font-size: var(--t-2xl);
+  max-width: 13ch;
 }
 .hero .lede {
   margin-top: 22px;
-  max-width: 54ch;
+  max-width: 48ch;
   color: var(--ink-dim);
   font-size: var(--t-md);
   line-height: 1.5;
 }
-.hero-fingerprint {
+.hero-actions {
   margin-top: 30px;
+  gap: 22px;
+}
+
+/* --- Provenance record (the one paper surface) --------------------------- */
+
+.record {
+  background: var(--paper);
+  color: var(--paper-ink);
+  border: 1px solid var(--paper-line);
+  border-radius: var(--radius-lg);
+  padding: 22px 24px;
+  box-shadow: 0 24px 60px -34px rgba(0, 0, 0, 0.55);
+}
+.record .record-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  color: var(--paper-dim);
+}
+.record h3 {
+  color: var(--paper-ink);
+  font-size: var(--t-lg);
+  margin: 16px 0 14px;
+}
+.record .record-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 11px 0;
+  border-top: 1px solid var(--paper-line);
+  font-size: var(--t-sm);
+}
+.record .record-row .k {
+  color: var(--paper-dim);
+  min-width: 92px;
+}
+.record .record-row .v {
+  font-family: var(--mono);
+  color: var(--paper-ink);
+}
+/* On paper, verified text must use the darker teal to pass contrast. */
+.record .seal.verified {
+  background: rgba(8, 112, 93, 0.12);
+  color: var(--teal-ink);
 }
 
 /* --- Fingerprint (functional hash chip) ---------------------------------- */
@@ -272,7 +398,7 @@ button {
   color: var(--ink-dim);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius);
   padding: 7px 12px;
   transition: border-color 0.15s, color 0.15s;
 }
@@ -281,8 +407,8 @@ button {
   color: var(--ink);
 }
 .fingerprint.verified {
-  border-color: rgba(34, 197, 168, 0.5);
-  color: var(--teal);
+  border-color: color-mix(in srgb, var(--teal) 50%, transparent);
+  color: var(--verified-ink);
 }
 .fingerprint .glyphs {
   display: inline-flex;
@@ -314,7 +440,7 @@ button {
 }
 .seal.verified {
   background: rgba(34, 197, 168, 0.12);
-  color: var(--teal);
+  color: var(--verified-ink);
 }
 .seal.contested {
   background: rgba(242, 181, 68, 0.12);
@@ -346,7 +472,7 @@ button {
 .repmeter .fill {
   height: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, var(--violet-deep), var(--violet), var(--teal));
+  background: linear-gradient(90deg, var(--violet), var(--teal));
 }
 .repmeter .num {
   font-family: var(--mono);
@@ -370,89 +496,116 @@ button {
   max-width: 56ch;
 }
 
-/* --- Bento grid ---------------------------------------------------------- */
+/* --- Discovery: fields as a hairline list (R2) --------------------------- */
 
-.bento {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 16px;
-}
-.tile {
-  --tint: var(--violet);
-  position: relative;
-  border: 1px solid var(--line);
-  background:
-    radial-gradient(130% 120% at 0% 0%, color-mix(in srgb, var(--tint) 20%, transparent) 0%, transparent 55%),
-    linear-gradient(160deg, var(--surface) 0%, var(--night) 140%);
-  border-radius: var(--radius-lg);
-  padding: 22px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s, background 0.18s;
-  text-align: left;
-  width: 100%;
-  color: inherit;
-}
-.tile:hover {
-  border-color: color-mix(in srgb, var(--tint) 70%, var(--line));
-  transform: translateY(-3px);
-  box-shadow: 0 16px 40px -24px color-mix(in srgb, var(--tint) 80%, transparent);
-  /* Fill the whole tile with a tinted wash on hover, not just a neon edge. */
-  background:
-    radial-gradient(130% 120% at 0% 0%, color-mix(in srgb, var(--tint) 34%, transparent) 0%, transparent 70%),
-    linear-gradient(160deg, color-mix(in srgb, var(--tint) 16%, var(--surface)) 0%, var(--night) 150%);
-}
-.tile[data-active="true"] {
-  border-color: var(--tint);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint) 45%, transparent);
-}
-.tile .corner {
-  color: var(--tint);
-}
-
-/* Per-field tints, each a distinct palette colour so areas read as distinct. */
-.tile.t-journalism  { --tint: var(--violet); }
-.tile.t-photography { --tint: var(--teal); }
-.tile.t-research    { --tint: var(--violet-soft); }
-.tile.t-art         { --tint: var(--violet-deep); }
-.tile.t-opinion     { --tint: var(--warning); }
-.tile.t-docs        { --tint: var(--risk); }
-.tile h3 {
-  font-size: var(--t-lg);
-  color: var(--mist);
-}
-.tile .blurb {
+.field-list {
+  border-top: 1px solid var(--line);
   margin-top: 8px;
+}
+.field-row {
+  display: grid;
+  grid-template-columns: 1.6fr 0.5fr 1fr 1.6fr 0.6fr;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  padding: 18px 8px;
+  color: inherit;
+  transition: background 0.14s;
+}
+.field-row:hover {
+  background: var(--surface);
+}
+.field-row[data-active="true"] {
+  background: var(--surface);
+}
+.field-row.head {
+  cursor: default;
+  padding: 0 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.field-row.head:hover {
+  background: transparent;
+}
+.field-row .col-head {
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  letter-spacing: 0.01em;
+}
+.field-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+/* The field hue is reduced to a single 8px dot — no washes, no tinted card. */
+.field-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--dot, var(--violet));
+}
+.field-dot.d-journalism  { --dot: var(--violet); }
+.field-dot.d-photography { --dot: var(--teal); }
+.field-dot.d-research    { --dot: var(--violet-soft); }
+.field-dot.d-art         { --dot: var(--risk); }
+.field-dot.d-opinion     { --dot: var(--warning); }
+.field-dot.d-docs        { --dot: var(--ink-dim); }
+.field-name .fn-label {
+  font-family: var(--display);
+  font-weight: 600;
+  color: var(--ink);
+  font-size: var(--t-base);
+}
+.field-name .fn-blurb {
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  margin-top: 2px;
+}
+.field-count {
+  font-family: var(--mono);
+  color: var(--ink);
+}
+.field-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-sm);
   color: var(--ink-dim);
+}
+.field-status .sdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ink-faint);
+}
+.field-status.s-verified .sdot { background: var(--teal); }
+.field-status.s-contested .sdot { background: var(--warning); }
+.field-status.s-disputed .sdot { background: var(--risk); }
+.field-status.s-pending .sdot { background: var(--ink-faint); }
+.field-latest {
+  color: var(--ink);
   font-size: var(--t-sm);
 }
-.tile .tilestat {
-  margin-top: 18px;
+.field-latest.empty a {
+  color: var(--link);
+}
+.field-updated {
   font-family: var(--mono);
   font-size: var(--t-xs);
   color: var(--ink-faint);
+  text-align: right;
 }
-.tile .corner {
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  opacity: 0.65;
-}
-/* asymmetric spans — rows always total 6 columns */
-.bento {
-  grid-auto-rows: 150px; /* base row height; `tall` tiles take two */
-}
-.tile.span-2 { grid-column: span 2; }
-.tile.span-3 { grid-column: span 3; }
-.tile.span-4 { grid-column: span 4; }
-.tile.tall  { grid-row: span 2; }
-/* Let content define height but never shrink below the row track. */
-.tile {
+.discovery-top {
   display: flex;
-  flex-direction: column;
-}
-.tile .tilestat {
-  margin-top: auto; /* pin the stat line to the bottom of each tile */
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
 /* --- Timeline ------------------------------------------------------------ */
@@ -469,7 +622,7 @@ button {
   top: 6px;
   bottom: 6px;
   width: 2px;
-  background: linear-gradient(var(--line), transparent);
+  background: linear-gradient(var(--line-strong), transparent);
 }
 .post {
   position: relative;
@@ -501,7 +654,6 @@ button {
 }
 .post h3 {
   font-size: var(--t-md);
-  color: var(--mist);
 }
 .post .desc {
   margin: 8px 0 16px;
@@ -533,7 +685,8 @@ button {
   display: block;
   margin-bottom: 16px;
 }
-.field label {
+.field label,
+.field > span {
   display: block;
   font-size: var(--t-sm);
   color: var(--ink-dim);
@@ -544,8 +697,8 @@ button {
 .field select {
   width: 100%;
   background: var(--night);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
   color: var(--ink);
   font-family: var(--body);
   font-size: var(--t-base);
@@ -573,12 +726,12 @@ button {
   padding: 28px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: linear-gradient(140deg, var(--surface), var(--night));
+  background: var(--surface);
 }
 .avatar {
   width: 64px;
   height: 64px;
-  border-radius: 18px;
+  border-radius: 16px;
   flex: none;
 }
 .addr {
@@ -605,14 +758,14 @@ button {
 .stat .v {
   font-family: var(--display);
   font-size: var(--t-xl);
-  color: var(--mist);
+  color: var(--ink);
   margin-top: 4px;
 }
 
 /* --- Notices / banners --------------------------------------------------- */
 
 .notice {
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 13px 16px;
   font-size: var(--t-sm);
   margin: 14px 0;
@@ -621,7 +774,7 @@ button {
 .notice.warn {
   background: rgba(242, 181, 68, 0.1);
   border-color: rgba(242, 181, 68, 0.3);
-  color: #f7d79a;
+  color: color-mix(in srgb, var(--warning) 70%, var(--ink));
 }
 .notice.info {
   background: var(--surface);
@@ -631,7 +784,7 @@ button {
 .notice.risk {
   background: rgba(239, 90, 111, 0.1);
   border-color: rgba(239, 90, 111, 0.3);
-  color: #f4a3af;
+  color: color-mix(in srgb, var(--risk) 72%, var(--ink));
 }
 
 /* --- Transaction log row ------------------------------------------------- */
@@ -641,7 +794,7 @@ button {
   align-items: center;
   gap: 14px;
   padding: 13px 0;
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line);
   font-size: var(--t-sm);
 }
 .txrow:last-child {
@@ -686,15 +839,20 @@ button {
 /* --- Responsive ---------------------------------------------------------- */
 
 @media (max-width: 860px) {
-  .bento {
-    grid-template-columns: repeat(2, 1fr);
-    grid-auto-rows: auto; /* let tiles size to content on small screens */
-  }
-  .tile.span-3, .tile.span-2, .tile.span-4 { grid-column: span 2; }
-  .tile.tall { grid-row: auto; }
   .grid-2 { grid-template-columns: 1fr; }
-  .hero h1 { font-size: var(--t-2xl); }
+  .hero-grid { grid-template-columns: 1fr; gap: 32px; }
+  .hero h1 { font-size: var(--t-xl); }
   .nav { display: none; }
+  .field-row {
+    grid-template-columns: 1.4fr 0.6fr 1fr;
+    gap: 12px;
+  }
+  .field-row .field-latest,
+  .field-row .field-updated,
+  .field-row.head .col-latest,
+  .field-row.head .col-updated {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -714,7 +872,7 @@ button {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(8, 6, 20, 0.72);
+  background: rgba(8, 8, 12, 0.72);
   backdrop-filter: blur(6px);
 }
 

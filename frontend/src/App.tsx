@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useWallet } from "./useWallet";
+import { useTheme } from "./useTheme";
 import { shortAddr } from "./web3";
 import { Fingerprint, Seal } from "./components";
 import { Discovery } from "./views/Discovery";
@@ -20,6 +21,7 @@ const NAV: { id: View; label: string }[] = [
 
 export default function App() {
   const wallet = useWallet();
+  const { theme, toggle } = useTheme();
   const [view, setView] = useState<View>("discover");
   const [topicFilter, setTopicFilter] = useState<string | null>(null);
   const [validating, setValidating] = useState<SamplePost | null>(null);
@@ -49,6 +51,14 @@ export default function App() {
             ))}
           </nav>
           <span className="spacer" />
+          <button
+            className="theme-toggle"
+            onClick={toggle}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            <ThemeIcon theme={theme} />
+          </button>
           <button
             className="wallet"
             onClick={wallet.connect}
@@ -120,38 +130,75 @@ export default function App() {
 function Hero({ onStart }: { onStart: () => void }) {
   return (
     <section className="hero">
-      <motion.h1
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-      >
-        Proof of who made it, and everything that changed since.
-      </motion.h1>
-      <motion.p
-        className="lede"
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.08, duration: 0.5, ease: "easeOut" }}
-      >
-        Register an article or image, and its fingerprint, author, and timestamp
-        are sealed on Monad. The community stakes its reputation to vouch for
-        what's original — and can dispute anything that isn't.
-      </motion.p>
-      <motion.div
-        className="hero-fingerprint row wrap"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.2, duration: 0.5 }}
-      >
-        <Fingerprint
-          hash="0x8f2a1c93be77d4e5a0b1c2d3e4f50617a8b9c0d1e2f3041526378490abcdef12"
-          verified
-        />
-        <Seal state="verified" />
-        <button className="btn btn-primary" onClick={onStart}>
-          Register your work
-        </button>
-      </motion.div>
+      <div className="hero-grid">
+        <div>
+          <motion.h1
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          >
+            Proof of who made it, and every change since.
+          </motion.h1>
+          <motion.p
+            className="lede"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.08, duration: 0.5, ease: "easeOut" }}
+          >
+            Register an article or image and its fingerprint, author and
+            timestamp are sealed on Monad. Validators stake their reputation on
+            what's original, and anything can be disputed.
+          </motion.p>
+          <motion.div
+            className="hero-actions row wrap"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+          >
+            <button className="btn btn-primary" onClick={onStart}>
+              Register your work
+            </button>
+            <a href="#how" onClick={(e) => e.preventDefault()}>
+              How validation works
+            </a>
+          </motion.div>
+        </div>
+
+        <motion.div
+          className="record"
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.14, duration: 0.5, ease: "easeOut" }}
+        >
+          <div className="record-top">
+            <span>Record #7 / research</span>
+            <Seal state="verified" />
+          </div>
+          <h3>Water telemetry report</h3>
+          <Fingerprint
+            hash="0x8f2a1c93be77d4e5a0b1c2d3e4f50617a8b9c0d1e2f3041526378490abcdef12"
+            verified
+          />
+          <div style={{ marginTop: 16 }}>
+            <div className="record-row">
+              <span className="k">Author</span>
+              <span className="v">0x4be1…a07c</span>
+            </div>
+            <div className="record-row">
+              <span className="k">Registered</span>
+              <span className="v">block 4,812,077</span>
+            </div>
+            <div className="record-row">
+              <span className="k">Versions</span>
+              <span className="v">v3</span>
+            </div>
+            <div className="record-row">
+              <span className="k">Validators</span>
+              <span className="v">31 staked · 82% original</span>
+            </div>
+          </div>
+        </motion.div>
+      </div>
     </section>
   );
 }
@@ -270,6 +317,34 @@ function ValidateModal({
         </p>
       </motion.div>
     </motion.div>
+  );
+}
+
+function ThemeIcon({ theme }: { theme: "dark" | "light" }) {
+  // Show the icon for the mode you'd switch TO: a sun while in dark, a moon
+  // while in light.
+  if (theme === "dark") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden>
+        <circle cx="12" cy="12" r="4.2" stroke="currentColor" strokeWidth="2" />
+        <path
+          d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M20 14.5A8 8 0 1 1 9.5 4a6.3 6.3 0 0 0 10.5 10.5z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
