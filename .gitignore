@@ -16,3 +16,4 @@ frontend/tsconfig.tsbuildinfo
 
 # Logs
 *.log
+.claude/

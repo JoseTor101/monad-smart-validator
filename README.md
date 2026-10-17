@@ -1,32 +1,34 @@
-# 🟣 Monad dApp Starter
+# Content Provenance Registry (Monad testnet)
 
-A clean starting architecture for a Monad hackathon project: a **Solidity smart contract** deployed to the **Monad testnet** via **Hardhat**, plus a **React + TypeScript** frontend (Vite + ethers) that connects a wallet and talks to the contract.
+Register articles and images onchain, track every edit, and let anyone check who registered content first and whether it changed. A reader can also attest or dispute each version.
 
-This is the *scaffolding only* — a placeholder `Greeter` contract shows the read/write pattern. Replace it with your own contract logic.
+**What this proves, and what it does not:** it proves integrity (a fingerprint, an author, timestamps, versions, raw vote counts). It does not prove that content is accurate. Attest/dispute counts are unweighted community signals.
 
----
+Only a SHA-256 fingerprint and a link go onchain. The content never leaves your device.
 
 ## Project structure
 
 ```
-monad-hackaton/
-├─ contracts/Greeter.sol      # placeholder contract (replace with your own)
-├─ scripts/deploy.ts          # deploys a contract to Monad testnet
-├─ hardhat.config.ts          # Hardhat config pointed at Monad testnet
-├─ .env.example               # where your private key goes (copy to .env)
-└─ frontend/                  # React + TypeScript UI (Vite)
-   └─ src/
-      ├─ App.tsx              # wallet connect + contract calls
-      └─ config.ts            # PASTE YOUR CONTRACT ADDRESS + ABI HERE
+contracts/ContentRegistry.sol   # the registry (written by hand)
+test/ContentRegistry.ts         # Hardhat tests
+scripts/deploy.ts               # deploy to Monad testnet
+scripts/demo-burst.ts           # speed demo: N back-to-back registrations
+frontend/                       # React + Vite + ethers UI (Check / Register / Record / Speed demo)
+specs/001-content-provenance-registry/   # spec, plan, tasks
+constitution.md                 # project rules
 ```
 
-### Key blockchain concepts (30-second version)
-- **Smart contract**: a program living on the blockchain. Once deployed, anyone can call it.
-- **Reading** state is free. **Writing** state (a transaction) costs a tiny bit of gas.
-- **Gas** is paid in the chain's native token. On Monad testnet that's **MON**, which you get free from a faucet.
-- **MetaMask** is the wallet that holds your account and signs transactions.
+## Known weaknesses (stated openly)
 
----
+| Weakness | Roadmap fix |
+|---|---|
+| Sybil attestations (one person, many wallets) | Stake-weighted votes, proof-of-personhood |
+| Front-running `register` to claim "first" | Commit-reveal registration |
+| Off-chain plagiarism before registration | Perceptual / text similarity |
+| Image hash breaks on resize or re-encode | Perceptual hashing |
+| Reverted edit cannot reuse an old hash | Let an id reuse its own hashes |
+
+Out of scope for now: reputation, staking, weighted voting, content storage, plagiarism detection, mainnet.
 
 ## Prerequisites
 - [Node.js](https://nodejs.org) 18+ installed
@@ -42,6 +44,7 @@ From the project root:
 ```bash
 npm install
 npm run compile
+npx hardhat test
 ```
 
 ## Step 2 — Add your private key
@@ -69,7 +72,7 @@ You'll see the deployed address printed. Copy it.
 
 ## Step 5 — Wire up the frontend
 
-Open `frontend/src/config.ts` and paste the address into `CONTRACT_ADDRESS`, and update `CONTRACT_ABI` to match your contract's functions.
+Open `frontend/src/config.ts` and paste the address into `CONTRACT_ADDRESS`, (the ABI already matches `ContentRegistry`).
 
 ## Step 6 — Run the frontend
 
@@ -97,8 +100,10 @@ Facts sourced from the [Monad documentation](https://docs.monad.xyz/ai/current-f
 
 ---
 
-## Making it your own
-1. Replace `contracts/Greeter.sol` with your contract (keep or rename the file).
-2. Update `scripts/deploy.ts` to deploy your contract (and pass any constructor args).
-3. Update `frontend/src/config.ts` with the new address and ABI.
-4. Update `frontend/src/App.tsx` to call your contract's functions.
+## Speed demo
+
+```bash
+REGISTRY_ADDRESS=0x... npx hardhat run scripts/demo-burst.ts --network monadTestnet
+```
+
+or use the **Speed demo** tab in the UI.

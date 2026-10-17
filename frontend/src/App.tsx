@@ -1,45 +1,30 @@
 import { useCallback, useEffect, useState } from "react";
-import { BrowserProvider, Contract } from "ethers";
-import { CONTRACT_ABI, CONTRACT_ADDRESS, MONAD_TESTNET } from "./config";
+import { BrowserProvider } from "ethers";
+import { CONTRACT_ADDRESS, MONAD_TESTNET } from "./config";
+import RegisterForm from "./components/RegisterForm";
+import CheckForm from "./components/CheckForm";
+import ContentDetail from "./components/ContentDetail";
+import DemoBurst from "./components/DemoBurst";
+
+type Tab = "check" | "register" | "record" | "demo";
 
 export default function App() {
   const [account, setAccount] = useState<string | null>(null);
-  const [greeting, setGreeting] = useState<string>("—");
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
-  const [newGreeting, setNewGreeting] = useState<string>("");
+  const [wrongNetwork, setWrongNetwork] = useState(false);
+  const [tab, setTab] = useState<Tab>("check");
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [idInput, setIdInput] = useState("");
 
   const hasWallet = typeof window !== "undefined" && !!window.ethereum;
   const contractIsSet =
     CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000";
 
-  // Build a read-only contract instance (no wallet popup needed to read).
-  const getReadContract = useCallback(() => {
-    if (!window.ethereum) throw new Error("No wallet found");
-    const provider = new BrowserProvider(window.ethereum);
-    return new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-  }, []);
-
-  // Build a contract instance connected to the signer (needed to write).
-  const getWriteContract = useCallback(async () => {
-    if (!window.ethereum) throw new Error("No wallet found");
-    const provider = new BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-    return new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-  }, []);
-
-  // Read the current greeting from the chain.
-  const refreshGreeting = useCallback(async () => {
-    if (!contractIsSet) return;
-    try {
-      const contract = getReadContract();
-      const value: string = await contract.greeting();
-      setGreeting(value);
-    } catch (err) {
-      console.error(err);
-      setStatus("Could not read from the contract. Is the address correct?");
-    }
-  }, [contractIsSet, getReadContract]);
+  const openRecord = (id: number) => {
+    setOpenId(id);
+    setTab("record");
+  };
 
   // Ask MetaMask to switch to Monad testnet, adding it if unknown.
   const ensureMonadNetwork = useCallback(async () => {
@@ -71,10 +56,16 @@ export default function App() {
     }
   }, []);
 
+  const checkNetwork = useCallback(async () => {
+    if (!window.ethereum) return;
+    const chainId = await window.ethereum.request({ method: "eth_chainId" });
+    setWrongNetwork(chainId !== MONAD_TESTNET.chainIdHex);
+  }, []);
+
   // Connect the wallet and make sure we're on Monad testnet.
   const connect = useCallback(async () => {
     if (!window.ethereum) {
-      setStatus("MetaMask not found. Install it to continue.");
+      setStatus("MetaMask not found. Install it to register, update or attest.");
       return;
     }
     try {
@@ -82,129 +73,110 @@ export default function App() {
       const provider = new BrowserProvider(window.ethereum);
       const accounts = await provider.send("eth_requestAccounts", []);
       await ensureMonadNetwork();
+      await checkNetwork();
       setAccount(accounts[0]);
       setStatus("Wallet connected.");
-      await refreshGreeting();
     } catch (err) {
       console.error(err);
       setStatus("Connection failed or was rejected.");
     } finally {
       setBusy(false);
     }
-  }, [ensureMonadNetwork, refreshGreeting]);
+  }, [ensureMonadNetwork, checkNetwork]);
 
-  // Generic helper: send a transaction and wait for it to be mined.
-  const sendTx = useCallback(
-    async (
-      label: string,
-      action: (c: Contract) => Promise<{ wait: () => Promise<unknown>; hash: string }>
-    ) => {
-      if (!account) {
-        setStatus("Connect your wallet first.");
-        return;
-      }
-      try {
-        setBusy(true);
-        setStatus(`${label}: sending transaction...`);
-        const contract = await getWriteContract();
-        const tx = await action(contract);
-        setStatus(`${label}: waiting for confirmation... (${tx.hash.slice(0, 10)}…)`);
-        await tx.wait();
-        setStatus(`${label}: confirmed!`);
-        await refreshGreeting();
-      } catch (err) {
-        console.error(err);
-        setStatus(`${label} failed or was rejected.`);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [account, getWriteContract, refreshGreeting]
-  );
-
-  const handleSetGreeting = () => {
-    if (newGreeting.trim() === "") {
-      setStatus("Enter a value first.");
-      return;
-    }
-    sendTx("Set greeting", (c) => c.setGreeting(newGreeting));
-  };
-
-  // Load the greeting once on mount (read-only, no wallet prompt).
-  useEffect(() => {
-    if (hasWallet && contractIsSet) refreshGreeting();
-  }, [hasWallet, contractIsSet, refreshGreeting]);
-
-  // React to the user switching accounts in MetaMask.
+  // React to the user switching accounts or networks in MetaMask.
   useEffect(() => {
     if (!window.ethereum?.on) return;
     const handleAccountsChanged = (...args: unknown[]) => {
       const accounts = args[0] as string[];
       setAccount(accounts[0] ?? null);
     };
+    const handleChainChanged = () => {
+      checkNetwork();
+    };
     window.ethereum.on("accountsChanged", handleAccountsChanged);
+    window.ethereum.on("chainChanged", handleChainChanged);
     return () => {
       window.ethereum?.removeListener?.("accountsChanged", handleAccountsChanged);
+      window.ethereum?.removeListener?.("chainChanged", handleChainChanged);
     };
-  }, []);
+  }, [checkNetwork]);
+
+  const openById = () => {
+    const n = Number(idInput);
+    if (!Number.isInteger(n) || n < 1) return setStatus("Enter a record number (1 or higher).");
+    setStatus("");
+    openRecord(n);
+  };
 
   return (
     <main className="container">
-      <h1>🟣 Monad dApp Starter</h1>
+      <h1>Content Provenance Registry</h1>
       <p className="subtitle">
-        A starter UI reading &amp; writing on-chain state on the Monad testnet.
+        Register content, track its versions, and check what is registered. This shows who registered
+        content first and whether it changed. It does not say the content is accurate.
       </p>
-
-      {!hasWallet && (
-        <div className="banner error">
-          No wallet detected. Install{" "}
-          <a href="https://metamask.io" target="_blank" rel="noreferrer">
-            MetaMask
-          </a>{" "}
-          to use this app.
-        </div>
-      )}
 
       {!contractIsSet && (
         <div className="banner warn">
-          Contract address not set yet. Deploy the contract, then paste the
-          address into <code>frontend/src/config.ts</code>.
+          Contract address not set yet. Deploy the contract, then paste the address into{" "}
+          <code>frontend/src/config.ts</code>.
+        </div>
+      )}
+      {wrongNetwork && (
+        <div className="banner warn">
+          Your wallet is not on {MONAD_TESTNET.chainName}. Reconnect to switch networks.
         </div>
       )}
 
-      <div className="card">
-        <div className="value-display">{greeting}</div>
-        <div className="value-label">current on-chain value</div>
-      </div>
-
-      {!account ? (
-        <button className="primary" onClick={connect} disabled={busy || !hasWallet}>
-          {busy ? "Connecting..." : "Connect Wallet"}
-        </button>
-      ) : (
-        <>
+      <div className="wallet">
+        {!account ? (
+          <button className="primary" onClick={connect} disabled={busy || !hasWallet}>
+            {busy ? "Connecting..." : "Connect Wallet"}
+          </button>
+        ) : (
           <div className="account">
             Connected: <code>{account.slice(0, 6)}…{account.slice(-4)}</code>
           </div>
+        )}
+        {!hasWallet && <span className="hint">No wallet detected. Checking content still works.</span>}
+      </div>
 
-          <div className="set-row">
+      <nav className="tabs">
+        <button className={tab === "check" ? "primary" : "ghost"} onClick={() => setTab("check")}>
+          Check
+        </button>
+        <button className={tab === "register" ? "primary" : "ghost"} onClick={() => setTab("register")}>
+          Register
+        </button>
+        <button className={tab === "record" ? "primary" : "ghost"} onClick={() => setTab("record")}>
+          Record
+        </button>
+        <button className={tab === "demo" ? "primary" : "ghost"} onClick={() => setTab("demo")}>
+          Speed demo
+        </button>
+      </nav>
+
+      {contractIsSet && tab === "check" && <CheckForm onOpen={openRecord} />}
+      {contractIsSet && tab === "register" && <RegisterForm account={account} onRegistered={openRecord} />}
+      {contractIsSet && tab === "record" && (
+        <>
+          <div className="row">
             <input
-              type="text"
-              placeholder="new value..."
-              value={newGreeting}
-              onChange={(e) => setNewGreeting(e.target.value)}
-              disabled={busy}
+              type="number"
+              min={1}
+              placeholder="Record number"
+              value={idInput}
+              onChange={(e) => setIdInput(e.target.value)}
             />
-            <button className="primary" onClick={handleSetGreeting} disabled={busy}>
-              Set
+            <button className="ghost" onClick={openById}>
+              Open
             </button>
           </div>
-
-          <button className="ghost" onClick={refreshGreeting} disabled={busy}>
-            ↻ Refresh
-          </button>
+          {openId !== null && <ContentDetail key={openId} id={openId} account={account} />}
         </>
       )}
+      {contractIsSet && tab === "demo" && <DemoBurst account={account} />}
 
       {status && <div className="status">{status}</div>}
 
