@@ -1,37 +1,61 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { formatEther } from "ethers";
 import { TOPICS, isDeployed, REGISTRY_ADDRESS } from "../config";
 import { SAMPLE_POSTS, type SamplePost } from "../sampleData";
 import { Fingerprint, RepMeter, Seal } from "../components";
-import { fetchAllContent, shortAddr, timeAgo, type ChainContent } from "../web3";
+import {
+  fetchAllContent,
+  latestRoundsByContent,
+  sealForRound,
+  shortAddr,
+  timeAgo,
+  type ChainContent,
+  type RoundState,
+} from "../web3";
 
 function topicLabel(slug: string): string {
   return TOPICS.find((t) => t.id === slug)?.label ?? slug;
 }
 
-// A registered item becomes a post. On-chain we only have hash / uri / kind /
-// time / versions — no title, description, topic, or reputation yet. We show
-// the uri as the heading (that's the label the author supplied) and mark the
-// piece "pending" until validation reads are wired up.
-function toPost(c: ChainContent): SamplePost {
+// Describe the seal in plain language for the post body.
+const SEAL_DESC: Record<string, string> = {
+  verified: "Validators staked that this is original. Verified on Monad.",
+  disputed: "Validators voted this is not original.",
+  contested: "A validation round is underway — votes revealed so far.",
+  pending: "Fingerprint, author and timestamp sealed on Monad. Awaiting community validation.",
+};
+
+// A registered item becomes a post, enriched with its latest validation round
+// (if any) so the seal, support meter and body reflect real on-chain state.
+function toPost(c: ChainContent, round?: RoundState): SamplePost {
   const label = c.title?.trim() || c.uri?.trim() || `Untitled #${c.id}`;
+  const seal = sealForRound(round);
+  // Support % = yes weight / total revealed weight, for the meter.
+  let support = 0;
+  if (round) {
+    const yes = Number(formatEther(round.yesWeight));
+    const no = Number(formatEther(round.noWeight));
+    const total = yes + no;
+    support = total > 0 ? Math.round((yes / total) * 100) : 0;
+  }
   return {
     id: c.id,
     title: label,
     description:
       c.parentId > 0
-        ? `Derivative of #${c.parentId}. Fingerprint sealed on Monad; awaiting community validation.`
-        : "Fingerprint, author and timestamp sealed on Monad. Awaiting community validation.",
+        ? `Derivative of #${c.parentId}. ${SEAL_DESC[seal]}`
+        : SEAL_DESC[seal],
     author: c.author,
     topic: "", // no on-chain topic field yet
     kind: c.kind,
     hash: c.hash,
     createdAt: c.createdAt,
     versions: c.versions,
-    reputation: 0,
-    seal: "pending",
-    yesWeight: 0,
-    noWeight: 0,
+    reputation: round && seal !== "pending" ? support : 0,
+    seal,
+    yesWeight: round ? Number(formatEther(round.yesWeight)) : 0,
+    noWeight: round ? Number(formatEther(round.noWeight)) : 0,
     uri: c.contentUrl ?? c.uri,
   };
 }
@@ -41,25 +65,35 @@ export function Timeline({
   onClearFilter,
   onValidate,
   onOpen,
+  refreshKey = 0,
 }: {
   filter: string | null;
   onClearFilter: () => void;
   onValidate: (post: SamplePost) => void;
   onOpen: (post: SamplePost) => void;
+  refreshKey?: number;
 }) {
   const deployed = isDeployed(REGISTRY_ADDRESS);
   const [chain, setChain] = useState<SamplePost[] | null>(null);
   const [loading, setLoading] = useState(deployed);
   const [error, setError] = useState<string | null>(null);
 
+  const load = useCallback(async () => {
+    const [items, rounds] = await Promise.all([
+      fetchAllContent(),
+      latestRoundsByContent(),
+    ]);
+    return items.map((c) => toPost(c, rounds.get(c.id)));
+  }, []);
+
   useEffect(() => {
     if (!deployed) return;
     let cancelled = false;
     setLoading(true);
-    fetchAllContent()
-      .then((items) => {
+    load()
+      .then((posts) => {
         if (cancelled) return;
-        setChain(items.map(toPost));
+        setChain(posts);
         setError(null);
       })
       .catch((err) => {
@@ -72,7 +106,7 @@ export function Timeline({
     return () => {
       cancelled = true;
     };
-  }, [deployed]);
+  }, [deployed, load, refreshKey]);
 
   // Prefer real on-chain content; fall back to sample data only when the
   // registry is empty or undeployed, so the demo still has something to show.
