@@ -6,9 +6,10 @@
 // ---------------------------------------------------------------------------
 const ZERO = "0x0000000000000000000000000000000000000000";
 
-export const REGISTRY_ADDRESS = ZERO;
-export const REPUTATION_ADDRESS = ZERO;
-export const MARKET_ADDRESS = ZERO;
+// Deployed to Monad testnet (see `npm run deploy`).
+export const REGISTRY_ADDRESS = "0xDcCB43d8Afad06615FBd1A5c2AB6525e113Bd2A5";
+export const REPUTATION_ADDRESS = "0xd270d7BA694b33e58483bD60057675FC39E9964D";
+export const MARKET_ADDRESS = "0x0777e7d871462b394fe94eAbDa5BA8ab40179A9D";
 
 export const isDeployed = (addr: string) => addr !== ZERO;
 
