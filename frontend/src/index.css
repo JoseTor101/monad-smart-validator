@@ -889,3 +889,49 @@ button {
 .modal .field {
   margin-bottom: 0;
 }
+
+/* --- Content detail view ------------------------------------------------- */
+
+.content-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.content-head h2 {
+  font-size: var(--t-xl);
+}
+.content-article {
+  font-size: var(--t-base);
+  line-height: 1.7;
+  color: var(--ink-body);
+  max-width: 68ch;
+}
+.content-article p {
+  margin: 0 0 1em;
+  white-space: pre-wrap;
+}
+.content-image {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  display: block;
+}
+
+/* Clickable affordances */
+.post-title-link {
+  cursor: pointer;
+}
+.post-title-link:hover {
+  color: var(--violet-soft);
+}
+.txrow-click {
+  cursor: pointer;
+  transition: background 0.14s;
+  border-radius: var(--radius);
+}
+.txrow-click:hover {
+  background: var(--surface-2);
+}

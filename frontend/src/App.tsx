@@ -23,9 +23,10 @@ import { Discovery } from "./views/Discovery";
 import { Timeline } from "./views/Timeline";
 import { Register } from "./views/Register";
 import { Profile } from "./views/Profile";
+import { ContentView } from "./views/ContentView";
 import type { SamplePost } from "./sampleData";
 
-type View = "discover" | "timeline" | "register" | "profile";
+type View = "discover" | "timeline" | "register" | "profile" | "content";
 
 const NAV: { id: View; label: string }[] = [
   { id: "discover", label: "Discover" },
@@ -40,10 +41,16 @@ export default function App() {
   const [view, setView] = useState<View>("discover");
   const [topicFilter, setTopicFilter] = useState<string | null>(null);
   const [validating, setValidating] = useState<SamplePost | null>(null);
+  const [viewing, setViewing] = useState<SamplePost | null>(null);
 
   function pickTopic(slug: string) {
     setTopicFilter((cur) => (cur === slug ? null : slug));
     setView("timeline");
+  }
+
+  function openContent(post: SamplePost) {
+    setViewing(post);
+    setView("content");
   }
 
   return (
@@ -119,10 +126,20 @@ export default function App() {
                 filter={topicFilter}
                 onClearFilter={() => setTopicFilter(null)}
                 onValidate={setValidating}
+                onOpen={openContent}
               />
             )}
             {view === "register" && <Register account={wallet.account} />}
-            {view === "profile" && <Profile account={wallet.account} />}
+            {view === "profile" && (
+              <Profile account={wallet.account} onOpen={openContent} />
+            )}
+            {view === "content" && viewing && (
+              <ContentView
+                post={viewing}
+                onBack={() => setView("timeline")}
+                onValidate={setValidating}
+              />
+            )}
           </motion.div>
         </AnimatePresence>
       </main>

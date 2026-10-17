@@ -562,3 +562,71 @@ export async function uploadArticleText(
   });
   return uploadContent(file);
 }
+
+// --- Reading stored content back -------------------------------------------
+
+// Public base for R2 objects, baked at build time. Used to turn a stored bare
+// key (e.g. "content/<hash>.txt") into a full URL. Falls back to same-origin.
+const PUBLIC_BASE =
+  (import.meta.env?.VITE_PUBLIC_BASE_URL as string | undefined)?.replace(
+    /\/$/,
+    ""
+  ) ?? "";
+
+/**
+ * Turn a stored uri into something fetchable. Full http(s) urls pass through;
+ * ipfs:// is routed through a public gateway; a bare R2 key gets the public
+ * base (or same-origin) prepended. Returns null if we can't form a URL.
+ */
+export function resolveContentUrl(uri: string): string | null {
+  const u = (uri ?? "").trim();
+  if (!u) return null;
+  if (/^https?:\/\//i.test(u)) return u;
+  if (/^ipfs:\/\//i.test(u)) return `https://ipfs.io/ipfs/${u.slice(7)}`;
+  if (u.startsWith("content/")) {
+    return PUBLIC_BASE ? `${PUBLIC_BASE}/${u}` : `/${u}`;
+  }
+  // Unknown shape (e.g. a plain title typed as uri) — not fetchable.
+  return null;
+}
+
+export interface FetchedContent {
+  url: string;
+  contentType: string;
+  isText: boolean;
+  isImage: boolean;
+  text?: string; // present for text content
+  hashMatches: boolean | null; // re-hash vs provided on-chain hash; null if unknown
+}
+
+/**
+ * Fetch stored content and, when an expected hash is given, re-hash the bytes
+ * to confirm they match what's sealed on-chain. This is the "anyone can verify"
+ * property made concrete.
+ */
+export async function fetchContent(
+  uri: string,
+  expectedHash?: string
+): Promise<FetchedContent> {
+  const url = resolveContentUrl(uri);
+  if (!url) throw new Error("This item has no fetchable content URL.");
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Couldn't fetch content (${res.status}).`);
+
+  const contentType = res.headers.get("content-type") ?? "";
+  const bytes = await res.arrayBuffer();
+
+  let hashMatches: boolean | null = null;
+  if (expectedHash) {
+    const got = await sha256Hex(bytes);
+    hashMatches = got.toLowerCase() === expectedHash.toLowerCase();
+  }
+
+  const isImage = contentType.startsWith("image/");
+  const isText =
+    contentType.startsWith("text/") || contentType.includes("json");
+  const text = isText ? new TextDecoder().decode(bytes) : undefined;
+
+  return { url, contentType, isText, isImage, text, hashMatches };
+}
