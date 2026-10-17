@@ -34,9 +34,11 @@ function contentToPost(c: ChainContent): SamplePost {
 export function Profile({
   account,
   onOpen,
+  refreshKey = 0,
 }: {
   account: string | null;
   onOpen: (post: SamplePost) => void;
+  refreshKey?: number;
 }) {
   const addr = account ?? "0x0000000000000000000000000000000000000000";
   const deployed = isDeployed(REGISTRY_ADDRESS);
@@ -66,7 +68,7 @@ export function Profile({
     return () => {
       cancelled = true;
     };
-  }, [account, deployed]);
+  }, [account, deployed, refreshKey]);
 
   return (
     <section>

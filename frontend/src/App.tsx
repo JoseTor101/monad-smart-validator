@@ -42,6 +42,9 @@ export default function App() {
   const [topicFilter, setTopicFilter] = useState<string | null>(null);
   const [validating, setValidating] = useState<SamplePost | null>(null);
   const [viewing, setViewing] = useState<SamplePost | null>(null);
+  // Bumped whenever a validation action may have changed on-chain state, so
+  // the Timeline and Profile re-read fresh round/reputation data.
+  const [refreshKey, setRefreshKey] = useState(0);
 
   function pickTopic(slug: string) {
     setTopicFilter((cur) => (cur === slug ? null : slug));
@@ -139,11 +142,16 @@ export default function App() {
                 onClearFilter={() => setTopicFilter(null)}
                 onValidate={setValidating}
                 onOpen={openContent}
+                refreshKey={refreshKey}
               />
             )}
             {view === "register" && <Register account={wallet.account} />}
             {view === "profile" && (
-              <Profile account={wallet.account} onOpen={openContent} />
+              <Profile
+                account={wallet.account}
+                onOpen={openContent}
+                refreshKey={refreshKey}
+              />
             )}
             {view === "content" && viewing && (
               <ContentView
@@ -162,6 +170,7 @@ export default function App() {
             post={validating}
             account={wallet.account}
             onClose={() => setValidating(null)}
+            onChanged={() => setRefreshKey((k) => k + 1)}
           />
         )}
       </AnimatePresence>
@@ -253,10 +262,12 @@ function ValidateModal({
   post,
   account,
   onClose,
+  onChanged,
 }: {
   post: SamplePost;
   account: string | null;
   onClose: () => void;
+  onChanged: () => void;
 }) {
   return (
     <motion.div
@@ -288,7 +299,7 @@ function ValidateModal({
           <Fingerprint hash={post.hash} verified={post.seal === "verified"} />
         </div>
 
-        <ValidateFlow post={post} account={account} />
+        <ValidateFlow post={post} account={account} onChanged={onChanged} />
       </motion.div>
     </motion.div>
   );
@@ -302,9 +313,11 @@ const REVEAL_WINDOW = 180; // 3 min
 function ValidateFlow({
   post,
   account,
+  onChanged,
 }: {
   post: SamplePost;
   account: string | null;
+  onChanged: () => void;
 }) {
   // Sample posts (demo seed) have a non-empty topic and seeded reputation;
   // real on-chain items come through with topic "" and reputation 0.
@@ -385,6 +398,7 @@ function ValidateFlow({
       await fn();
       setStatus(`${label}: confirmed.`);
       await refresh();
+      onChanged(); // let Timeline/Profile re-read fresh round + reputation
     } catch (err) {
       console.error(err);
       const msg =
