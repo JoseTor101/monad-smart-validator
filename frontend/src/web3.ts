@@ -107,7 +107,9 @@ export interface ChainContent {
   parentId: number;
   versions: number;
   hash: string; // latest content hash
-  uri: string; // latest version uri (user-supplied label/location)
+  uri: string; // on-chain uri (points at metadata json, content file, or label)
+  title?: string; // resolved from metadata when available
+  contentUrl?: string; // resolved actual content path (meta.contentUrl or uri)
 }
 
 /**
@@ -137,6 +139,9 @@ export async function fetchAllContent(): Promise<ChainContent[]> {
           ? latest.contentHash ?? latest[0]
           : await registry.latestHash(id);
         const uri: string = latest ? latest.uri ?? latest[1] : "";
+        // If the uri points at a metadata JSON, pull the real title + the
+        // actual content path from it. Otherwise fall back to the raw uri.
+        const meta = await fetchMeta(uri);
         return {
           id,
           author,
@@ -146,6 +151,8 @@ export async function fetchAllContent(): Promise<ChainContent[]> {
           versions: vcount,
           hash,
           uri,
+          title: meta?.title,
+          contentUrl: meta?.contentUrl ?? uri,
         };
       } catch (err) {
         console.warn(`Skipping content #${id}:`, err);
@@ -157,6 +164,17 @@ export async function fetchAllContent(): Promise<ChainContent[]> {
   return results
     .filter((c): c is ChainContent => c !== null)
     .sort((a, b) => b.createdAt - a.createdAt || b.id - a.id);
+}
+
+/** Has this exact content hash already been registered? (duplicate guard) */
+export async function registryIsRegistered(hash: string): Promise<boolean> {
+  if (!isDeployed(REGISTRY_ADDRESS)) return false;
+  try {
+    return await registryRead().isRegistered(hash);
+  } catch (err) {
+    console.warn("isRegistered check failed:", err);
+    return false; // let the on-chain guard be the final authority
+  }
 }
 
 // --- Hashing ----------------------------------------------------------------
@@ -509,4 +527,159 @@ export async function withdrawRound(roundId: number): Promise<void> {
   const market = await marketWrite();
   const tx = await market.withdraw(roundId);
   await tx.wait();
+}
+
+// --- Content upload (Cloudflare R2 via Pages Function) ---------------------
+
+export interface UploadResult {
+  key: string; // R2 object key
+  url: string; // same-origin path served by the content Function (e.g. /content/<hash>.txt)
+  publicUrl?: string; // absolute r2.dev/custom-domain URL if PUBLIC_BASE_URL is set
+  hash: string; // 0x-prefixed SHA-256 the server computed over the bytes
+  size: number;
+  contentType: string;
+}
+
+// Where the upload endpoint lives. Same-origin by default (the Pages Function
+// at /api/upload); overridable for local dev or a standalone Worker.
+const UPLOAD_ENDPOINT =
+  (import.meta.env?.VITE_UPLOAD_ENDPOINT as string | undefined) ?? "/api/upload";
+
+/**
+ * Upload a file to R2 through the Pages Function and get back its public URL +
+ * server-computed hash. No wallet/gas involved — this is pure storage. The
+ * caller then records the hash + url on-chain via register().
+ */
+export async function uploadContent(file: File): Promise<UploadResult> {
+  const body = new FormData();
+  body.append("file", file);
+
+  const res = await fetch(UPLOAD_ENDPOINT, { method: "POST", body });
+  let payload: unknown = null;
+  try {
+    payload = await res.json();
+  } catch {
+    /* non-JSON error body */
+  }
+  if (!res.ok) {
+    const msg =
+      (payload as { error?: string })?.error ??
+      `Upload failed (${res.status})`;
+    throw new Error(msg);
+  }
+  return payload as UploadResult;
+}
+
+/** Upload UTF-8 article text as a .txt file so it can be re-read and re-hashed. */
+export async function uploadArticleText(
+  title: string,
+  text: string
+): Promise<UploadResult> {
+  const safe = (title || "article").replace(/[^a-z0-9-_]+/gi, "-").slice(0, 40);
+  const file = new File([text], `${safe || "article"}.txt`, {
+    type: "text/plain",
+  });
+  return uploadContent(file);
+}
+
+// --- Metadata (title/field live off-chain, since the contract has no such
+//     fields) -----------------------------------------------------------------
+
+export interface ContentMeta {
+  title: string;
+  description?: string;
+  field: string; // topic slug
+  kind: "Article" | "Image";
+  contentUrl: string; // same-origin /content/<key> path to the actual file
+  contentHash: string; // 0x SHA-256 of the actual content (== on-chain hash)
+}
+
+/**
+ * Upload a metadata JSON describing a piece. The returned url is what we store
+ * on-chain as the `uri`; views read it to get the real title + content URL.
+ */
+export async function uploadMeta(meta: ContentMeta): Promise<UploadResult> {
+  const json = JSON.stringify(meta, null, 2);
+  const file = new File([json], "meta.json", { type: "application/json" });
+  return uploadContent(file);
+}
+
+/**
+ * Given an on-chain uri, return its metadata if it points at a metadata JSON.
+ * Returns null for plain content uris, external links, or titles.
+ */
+export async function fetchMeta(uri: string): Promise<ContentMeta | null> {
+  const url = resolveContentUrl(uri);
+  if (!url) return null;
+  // Only JSON metadata objects carry a title; .txt/.png content won't parse.
+  if (!/\.json$/i.test(url)) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = (await res.json()) as ContentMeta;
+    if (data && typeof data.title === "string" && data.contentUrl) return data;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// --- Reading stored content back -------------------------------------------
+
+/**
+ * Turn a stored uri into something fetchable. Full http(s) urls pass through;
+ * ipfs:// is routed through a public gateway; a bare R2 key gets the public
+ * base (or same-origin) prepended. Returns null if we can't form a URL.
+ */
+export function resolveContentUrl(uri: string): string | null {
+  const u = (uri ?? "").trim();
+  if (!u) return null;
+  if (/^https?:\/\//i.test(u)) return u;
+  if (/^ipfs:\/\//i.test(u)) return `https://ipfs.io/ipfs/${u.slice(7)}`;
+  // Same-origin content path served by functions/content/[[path]].ts.
+  if (u.startsWith("/content/")) return u;
+  if (u.startsWith("content/")) return `/${u}`;
+  // Unknown shape (e.g. a plain title typed as uri) — not fetchable.
+  return null;
+}
+
+export interface FetchedContent {
+  url: string;
+  contentType: string;
+  isText: boolean;
+  isImage: boolean;
+  text?: string; // present for text content
+  hashMatches: boolean | null; // re-hash vs provided on-chain hash; null if unknown
+}
+
+/**
+ * Fetch stored content and, when an expected hash is given, re-hash the bytes
+ * to confirm they match what's sealed on-chain. This is the "anyone can verify"
+ * property made concrete.
+ */
+export async function fetchContent(
+  uri: string,
+  expectedHash?: string
+): Promise<FetchedContent> {
+  const url = resolveContentUrl(uri);
+  if (!url) throw new Error("This item has no fetchable content URL.");
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Couldn't fetch content (${res.status}).`);
+
+  const contentType = res.headers.get("content-type") ?? "";
+  const bytes = await res.arrayBuffer();
+
+  let hashMatches: boolean | null = null;
+  if (expectedHash) {
+    const got = await sha256Hex(bytes);
+    hashMatches = got.toLowerCase() === expectedHash.toLowerCase();
+  }
+
+  const isImage = contentType.startsWith("image/");
+  const isText =
+    contentType.startsWith("text/") || contentType.includes("json");
+  const text = isText ? new TextDecoder().decode(bytes) : undefined;
+
+  return { url, contentType, isText, isImage, text, hashMatches };
 }

@@ -1,15 +1,43 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Avatar, Fingerprint, RepMeter } from "../components";
-import { MONAD_TESTNET, isDeployed, REGISTRY_ADDRESS } from "../config";
+import { isDeployed, REGISTRY_ADDRESS } from "../config";
 import {
   fetchProfile,
   shortAddr,
   timeAgo,
+  type ChainContent,
   type ChainProfile,
 } from "../web3";
+import type { SamplePost } from "../sampleData";
 
-export function Profile({ account }: { account: string | null }) {
+// Map an on-chain registration into the post shape the content view consumes.
+function contentToPost(c: ChainContent): SamplePost {
+  return {
+    id: c.id,
+    title: c.title?.trim() || c.uri?.trim() || `Content #${c.id}`,
+    description: "",
+    author: c.author,
+    topic: "",
+    kind: c.kind,
+    hash: c.hash,
+    createdAt: c.createdAt,
+    versions: c.versions,
+    reputation: 0,
+    seal: "pending",
+    yesWeight: 0,
+    noWeight: 0,
+    uri: c.contentUrl ?? c.uri,
+  };
+}
+
+export function Profile({
+  account,
+  onOpen,
+}: {
+  account: string | null;
+  onOpen: (post: SamplePost) => void;
+}) {
   const addr = account ?? "0x0000000000000000000000000000000000000000";
   const deployed = isDeployed(REGISTRY_ADDRESS);
   const [data, setData] = useState<ChainProfile | null>(null);
@@ -132,27 +160,27 @@ export function Profile({ account }: { account: string | null }) {
               data.content.map((c, i) => (
                 <motion.div
                   key={c.id}
-                  className="txrow"
+                  className="txrow txrow-click"
                   style={{ gap: 16 }}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.04 * i, duration: 0.3 }}
+                  onClick={() => onOpen(contentToPost(c))}
+                  role="link"
+                  tabIndex={0}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" && onOpen(contentToPost(c))
+                  }
                 >
                   <span className="tx-kind">
                     #{c.id} · {c.kind}
                   </span>
-                  <span className="muted">{c.uri?.trim() || "Untitled"}</span>
-                  <div style={{ marginLeft: "auto" }} className="row" >
+                  <span className="muted">
+                    {c.title?.trim() || c.uri?.trim() || "Untitled"}
+                  </span>
+                  <div style={{ marginLeft: "auto" }} className="row">
                     <Fingerprint hash={c.hash} />
-                    <a
-                      className="tx-hash"
-                      href={`${MONAD_TESTNET.blockExplorerUrl}/address/${c.author}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="Open author in explorer"
-                    >
-                      {timeAgo(c.createdAt)}
-                    </a>
+                    <span className="tx-hash">{timeAgo(c.createdAt)}</span>
                   </div>
                 </motion.div>
               ))

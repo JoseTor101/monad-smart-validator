@@ -14,7 +14,7 @@ function topicLabel(slug: string): string {
 // the uri as the heading (that's the label the author supplied) and mark the
 // piece "pending" until validation reads are wired up.
 function toPost(c: ChainContent): SamplePost {
-  const label = c.uri?.trim() || `Untitled #${c.id}`;
+  const label = c.title?.trim() || c.uri?.trim() || `Untitled #${c.id}`;
   return {
     id: c.id,
     title: label,
@@ -32,6 +32,7 @@ function toPost(c: ChainContent): SamplePost {
     seal: "pending",
     yesWeight: 0,
     noWeight: 0,
+    uri: c.contentUrl ?? c.uri,
   };
 }
 
@@ -39,10 +40,12 @@ export function Timeline({
   filter,
   onClearFilter,
   onValidate,
+  onOpen,
 }: {
   filter: string | null;
   onClearFilter: () => void;
   onValidate: (post: SamplePost) => void;
+  onOpen: (post: SamplePost) => void;
 }) {
   const deployed = isDeployed(REGISTRY_ADDRESS);
   const [chain, setChain] = useState<SamplePost[] | null>(null);
@@ -126,7 +129,15 @@ export function Timeline({
                       .filter(Boolean)
                       .join(" · ")}
                   </div>
-                  <h3>{p.title}</h3>
+                  <h3
+                    className="post-title-link"
+                    onClick={() => onOpen(p)}
+                    role="link"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === "Enter" && onOpen(p)}
+                  >
+                    {p.title}
+                  </h3>
                 </div>
                 <Seal state={p.seal} />
               </div>
@@ -143,13 +154,14 @@ export function Timeline({
                 <span className="meta">
                   {shortAddr(p.author)} · {timeAgo(p.createdAt)}
                 </span>
-                <button
-                  className="btn"
-                  style={{ marginLeft: "auto" }}
-                  onClick={() => onValidate(p)}
-                >
-                  {p.seal === "disputed" ? "View dispute" : "Validate"}
-                </button>
+                <div className="row" style={{ marginLeft: "auto", gap: 8 }}>
+                  <button className="btn btn-ghost" onClick={() => onOpen(p)}>
+                    View
+                  </button>
+                  <button className="btn" onClick={() => onValidate(p)}>
+                    {p.seal === "disputed" ? "View dispute" : "Validate"}
+                  </button>
+                </div>
               </div>
             </motion.article>
           ))}

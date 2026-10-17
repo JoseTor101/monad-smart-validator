@@ -23,9 +23,10 @@ import { Discovery } from "./views/Discovery";
 import { Timeline } from "./views/Timeline";
 import { Register } from "./views/Register";
 import { Profile } from "./views/Profile";
+import { ContentView } from "./views/ContentView";
 import type { SamplePost } from "./sampleData";
 
-type View = "discover" | "timeline" | "register" | "profile";
+type View = "discover" | "timeline" | "register" | "profile" | "content";
 
 const NAV: { id: View; label: string }[] = [
   { id: "discover", label: "Discover" },
@@ -40,10 +41,16 @@ export default function App() {
   const [view, setView] = useState<View>("discover");
   const [topicFilter, setTopicFilter] = useState<string | null>(null);
   const [validating, setValidating] = useState<SamplePost | null>(null);
+  const [viewing, setViewing] = useState<SamplePost | null>(null);
 
   function pickTopic(slug: string) {
     setTopicFilter((cur) => (cur === slug ? null : slug));
     setView("timeline");
+  }
+
+  function openContent(post: SamplePost) {
+    setViewing(post);
+    setView("content");
   }
 
   return (
@@ -74,18 +81,30 @@ export default function App() {
           >
             <ThemeIcon theme={theme} />
           </button>
-          <button
-            className="wallet"
-            onClick={wallet.connect}
-            disabled={wallet.connecting}
-          >
-            {wallet.account && <span className="dot" />}
-            {wallet.account
-              ? shortAddr(wallet.account)
-              : wallet.connecting
-              ? "Connecting…"
-              : "Connect wallet"}
-          </button>
+          {wallet.account ? (
+            <div className="wallet-group">
+              <span className="wallet" title={wallet.account}>
+                <span className="dot" />
+                {shortAddr(wallet.account)}
+              </span>
+              <button
+                className="theme-toggle"
+                onClick={wallet.disconnect}
+                aria-label="Disconnect wallet"
+                title="Disconnect wallet"
+              >
+                <LogoutIcon />
+              </button>
+            </div>
+          ) : (
+            <button
+              className="wallet"
+              onClick={wallet.connect}
+              disabled={wallet.connecting}
+            >
+              {wallet.connecting ? "Connecting…" : "Connect wallet"}
+            </button>
+          )}
         </div>
       </header>
 
@@ -119,10 +138,20 @@ export default function App() {
                 filter={topicFilter}
                 onClearFilter={() => setTopicFilter(null)}
                 onValidate={setValidating}
+                onOpen={openContent}
               />
             )}
             {view === "register" && <Register account={wallet.account} />}
-            {view === "profile" && <Profile account={wallet.account} />}
+            {view === "profile" && (
+              <Profile account={wallet.account} onOpen={openContent} />
+            )}
+            {view === "content" && viewing && (
+              <ContentView
+                post={viewing}
+                onBack={() => setView("timeline")}
+                onValidate={setValidating}
+              />
+            )}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -621,6 +650,27 @@ function ThemeIcon({ theme }: { theme: "dark" | "light" }) {
         d="M20 14.5A8 8 0 1 1 9.5 4a6.3 6.3 0 0 0 10.5 10.5z"
         stroke="currentColor"
         strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M15 12H4m0 0l3.5-3.5M4 12l3.5 3.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10 7V5.5A1.5 1.5 0 0 1 11.5 4h6A1.5 1.5 0 0 1 19 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-6A1.5 1.5 0 0 1 10 18.5V17"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
     </svg>

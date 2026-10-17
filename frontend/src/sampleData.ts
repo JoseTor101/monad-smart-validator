@@ -18,6 +18,7 @@ export interface SamplePost {
   seal: SealState;
   yesWeight: number;
   noWeight: number;
+  uri?: string; // where the content is hosted (R2/ipfs/https); on-chain items only
 }
 
 const now = Math.floor(Date.now() / 1000);
