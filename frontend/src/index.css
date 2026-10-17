@@ -269,6 +269,12 @@ button {
   box-shadow: 0 0 0 3px rgba(34, 197, 168, 0.18);
 }
 
+.wallet-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* --- Buttons ------------------------------------------------------------- */
 
 .btn {

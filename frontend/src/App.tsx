@@ -81,18 +81,30 @@ export default function App() {
           >
             <ThemeIcon theme={theme} />
           </button>
-          <button
-            className="wallet"
-            onClick={wallet.connect}
-            disabled={wallet.connecting}
-          >
-            {wallet.account && <span className="dot" />}
-            {wallet.account
-              ? shortAddr(wallet.account)
-              : wallet.connecting
-              ? "Connecting…"
-              : "Connect wallet"}
-          </button>
+          {wallet.account ? (
+            <div className="wallet-group">
+              <span className="wallet" title={wallet.account}>
+                <span className="dot" />
+                {shortAddr(wallet.account)}
+              </span>
+              <button
+                className="theme-toggle"
+                onClick={wallet.disconnect}
+                aria-label="Disconnect wallet"
+                title="Disconnect wallet"
+              >
+                <LogoutIcon />
+              </button>
+            </div>
+          ) : (
+            <button
+              className="wallet"
+              onClick={wallet.connect}
+              disabled={wallet.connecting}
+            >
+              {wallet.connecting ? "Connecting…" : "Connect wallet"}
+            </button>
+          )}
         </div>
       </header>
 
@@ -638,6 +650,27 @@ function ThemeIcon({ theme }: { theme: "dark" | "light" }) {
         d="M20 14.5A8 8 0 1 1 9.5 4a6.3 6.3 0 0 0 10.5 10.5z"
         stroke="currentColor"
         strokeWidth="2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function LogoutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M15 12H4m0 0l3.5-3.5M4 12l3.5 3.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10 7V5.5A1.5 1.5 0 0 1 11.5 4h6A1.5 1.5 0 0 1 19 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-6A1.5 1.5 0 0 1 10 18.5V17"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
     </svg>
