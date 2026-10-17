@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { Kind, TOPICS, isDeployed, REGISTRY_ADDRESS } from "../config";
 import { Fingerprint } from "../components";
-import { registryWrite, sha256Hex, sha256Text } from "../web3";
+import {
+  registryWrite,
+  sha256Hex,
+  sha256Text,
+  uploadArticleText,
+  uploadContent,
+} from "../web3";
 
 type Mode = "article" | "image";
 
@@ -11,6 +17,7 @@ export function Register({ account }: { account: string | null }) {
   const [topic, setTopic] = useState<string>(TOPICS[0].id);
   const [body, setBody] = useState("");
   const [uri, setUri] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [hash, setHash] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -25,6 +32,7 @@ export function Register({ account }: { account: string | null }) {
     if (!file) return;
     const buf = await file.arrayBuffer();
     setHash(await sha256Hex(buf));
+    setImageFile(file);
     setUri(file.name);
   }
 
@@ -45,16 +53,51 @@ export function Register({ account }: { account: string | null }) {
     }
     try {
       setBusy(true);
+
+      // 1) Upload the actual content to R2 (off-chain, no wallet) so the piece
+      //    can later be viewed and re-hashed to verify the on-chain fingerprint.
+      //    If a uri was pasted manually (e.g. ipfs://), skip the upload.
+      let finalUri = uri;
+      const hasContentToUpload =
+        (mode === "article" && body.trim()) || (mode === "image" && imageFile);
+      const uriLooksExternal = /^(https?:|ipfs:)/i.test(uri.trim());
+
+      if (hasContentToUpload && !uriLooksExternal) {
+        setStatus("Uploading content to storage…");
+        try {
+          const result =
+            mode === "article"
+              ? await uploadArticleText(title, body)
+              : await uploadContent(imageFile!);
+          finalUri = result.url;
+          // Defensive: the server hashes the same bytes, so it must match the
+          // hash we computed locally. If it ever diverges, trust the local one.
+          if (result.hash.toLowerCase() !== hash.toLowerCase()) {
+            console.warn("Server/client hash mismatch", result.hash, hash);
+          }
+          setUri(finalUri);
+        } catch (err) {
+          console.error(err);
+          setStatus(
+            `Upload failed: ${(err as Error).message}. You can paste a URL manually and retry.`
+          );
+          setBusy(false);
+          return;
+        }
+      }
+
+      // 2) Record the fingerprint + uri on-chain (the one wallet transaction).
       setStatus("Registering: confirm in your wallet…");
       const registry = await registryWrite();
       const kind = mode === "article" ? Kind.Article : Kind.Image;
-      const tx = await registry.register(hash, uri || title, kind);
+      const tx = await registry.register(hash, finalUri || title, kind);
       setStatus(`Submitted ${tx.hash.slice(0, 10)}… — waiting for confirmation`);
       await tx.wait();
       setStatus("Registered. Provenance is now on-chain.");
       setTitle("");
       setBody("");
       setUri("");
+      setImageFile(null);
       setHash(null);
     } catch (err) {
       console.error(err);
@@ -175,9 +218,11 @@ export function Register({ account }: { account: string | null }) {
               )}
             </div>
             <p className="muted" style={{ fontSize: "0.8rem", marginTop: 16 }}>
-              Anyone can later re-hash the published content and check it against
-              this fingerprint. If a single character changes, the hash changes,
-              and the edit shows up as a new version.
+              On register, your content is uploaded to storage and its fingerprint,
+              author and time are sealed on-chain. Anyone can later re-hash the
+              hosted file and check it against this fingerprint — if a single
+              character changes, so does the hash, and the edit becomes a new
+              version.
             </p>
           </div>
 

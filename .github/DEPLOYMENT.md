@@ -68,3 +68,54 @@ npm run build
 npx wrangler login
 npx wrangler pages deploy dist --project-name=monad-smart-validator --branch=main
 ```
+
+---
+
+## Content uploads (Cloudflare R2)
+
+Registered content (article text / images) is uploaded to an R2 bucket through
+a same-origin Pages Function at `frontend/functions/api/upload.ts` (route
+`POST /api/upload`). The browser never holds R2 credentials; the function uses
+an R2 **binding**. Flow: hash in browser -> upload to R2 (no wallet) -> record
+hash + public URL on-chain via `register()`.
+
+### One-time Cloudflare setup
+
+1. **Create the bucket** (done): `monad-smart-validator-cdn`.
+2. **Enable public read** on the bucket: R2 bucket -> Settings -> Public access
+   -> enable the r2.dev subdomain (or attach a custom domain). This yields a
+   public base URL, e.g. `https://pub-<id>.r2.dev`. Public read is required so
+   anyone can re-hash the hosted file and verify it against the on-chain hash.
+3. **Bind the bucket to the Pages project:** Pages project
+   (`monad-smart-validator`) -> Settings -> Bindings (Functions) -> add an
+   **R2 bucket binding**:
+   - Variable name: `CONTENT_BUCKET` (must match the code)
+   - Bucket: `monad-smart-validator-cdn`
+   - Add for Production (and Preview if desired).
+4. **Set the public base URL env var:** Pages project -> Settings ->
+   Variables and Secrets:
+   - `PUBLIC_BASE_URL` = the r2.dev/custom-domain base, no trailing slash.
+
+Bindings/vars take effect on the **next deploy**, so redeploy (push to `main`)
+after adding them.
+
+### Guardrails (in the function)
+
+- 10 MB max file size (client and server enforced).
+- Content-type allowlist: `image/*`, `text/*`, `application/pdf`.
+- Objects are content-addressed (`content/<sha256>.<ext>`) so identical files
+  dedupe and the key is tamper-evident.
+- A per-IP rate limit is a sensible follow-up (needs KV/Durable Objects).
+
+### Local testing
+
+Pages Functions don't run under plain `vite dev`. To exercise `/api/upload`
+locally, build then run Wrangler's Pages dev with a local bucket:
+
+```bash
+cd frontend
+npm run build
+npx wrangler pages dev dist --r2 CONTENT_BUCKET
+```
+
+Otherwise test against the deployed Pages preview/production.

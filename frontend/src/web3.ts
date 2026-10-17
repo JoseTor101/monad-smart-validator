@@ -510,3 +510,55 @@ export async function withdrawRound(roundId: number): Promise<void> {
   const tx = await market.withdraw(roundId);
   await tx.wait();
 }
+
+// --- Content upload (Cloudflare R2 via Pages Function) ---------------------
+
+export interface UploadResult {
+  key: string; // R2 object key
+  url: string; // public URL to the stored file (or key if no public base set)
+  hash: string; // 0x-prefixed SHA-256 the server computed over the bytes
+  size: number;
+  contentType: string;
+}
+
+// Where the upload endpoint lives. Same-origin by default (the Pages Function
+// at /api/upload); overridable for local dev or a standalone Worker.
+const UPLOAD_ENDPOINT =
+  (import.meta.env?.VITE_UPLOAD_ENDPOINT as string | undefined) ?? "/api/upload";
+
+/**
+ * Upload a file to R2 through the Pages Function and get back its public URL +
+ * server-computed hash. No wallet/gas involved — this is pure storage. The
+ * caller then records the hash + url on-chain via register().
+ */
+export async function uploadContent(file: File): Promise<UploadResult> {
+  const body = new FormData();
+  body.append("file", file);
+
+  const res = await fetch(UPLOAD_ENDPOINT, { method: "POST", body });
+  let payload: unknown = null;
+  try {
+    payload = await res.json();
+  } catch {
+    /* non-JSON error body */
+  }
+  if (!res.ok) {
+    const msg =
+      (payload as { error?: string })?.error ??
+      `Upload failed (${res.status})`;
+    throw new Error(msg);
+  }
+  return payload as UploadResult;
+}
+
+/** Upload UTF-8 article text as a .txt file so it can be re-read and re-hashed. */
+export async function uploadArticleText(
+  title: string,
+  text: string
+): Promise<UploadResult> {
+  const safe = (title || "article").replace(/[^a-z0-9-_]+/gi, "-").slice(0, 40);
+  const file = new File([text], `${safe || "article"}.txt`, {
+    type: "text/plain",
+  });
+  return uploadContent(file);
+}
