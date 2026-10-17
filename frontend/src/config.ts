@@ -3,7 +3,7 @@
 // You get this after running `npm run deploy` from the project root.
 // The zero address below is a placeholder — the UI shows a warning until set.
 // ---------------------------------------------------------------------------
-export const CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000";
+export const CONTRACT_ADDRESS = "0xb613173F091ABbBe60135727C8E9d3e3Ecd4652A";
 
 // Monad Testnet network details.
 // Source of truth: https://docs.monad.xyz (Testnet Quick Facts)
