@@ -15,7 +15,7 @@ import type { SamplePost } from "../sampleData";
 function contentToPost(c: ChainContent): SamplePost {
   return {
     id: c.id,
-    title: c.uri?.trim() || `Content #${c.id}`,
+    title: c.title?.trim() || c.uri?.trim() || `Content #${c.id}`,
     description: "",
     author: c.author,
     topic: "",
@@ -27,7 +27,7 @@ function contentToPost(c: ChainContent): SamplePost {
     seal: "pending",
     yesWeight: 0,
     noWeight: 0,
-    uri: c.uri,
+    uri: c.contentUrl ?? c.uri,
   };
 }
 
@@ -175,7 +175,9 @@ export function Profile({
                   <span className="tx-kind">
                     #{c.id} · {c.kind}
                   </span>
-                  <span className="muted">{c.uri?.trim() || "Untitled"}</span>
+                  <span className="muted">
+                    {c.title?.trim() || c.uri?.trim() || "Untitled"}
+                  </span>
                   <div style={{ marginLeft: "auto" }} className="row">
                     <Fingerprint hash={c.hash} />
                     <span className="tx-hash">{timeAgo(c.createdAt)}</span>

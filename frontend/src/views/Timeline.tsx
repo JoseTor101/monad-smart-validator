@@ -14,7 +14,7 @@ function topicLabel(slug: string): string {
 // the uri as the heading (that's the label the author supplied) and mark the
 // piece "pending" until validation reads are wired up.
 function toPost(c: ChainContent): SamplePost {
-  const label = c.uri?.trim() || `Untitled #${c.id}`;
+  const label = c.title?.trim() || c.uri?.trim() || `Untitled #${c.id}`;
   return {
     id: c.id,
     title: label,
@@ -32,7 +32,7 @@ function toPost(c: ChainContent): SamplePost {
     seal: "pending",
     yesWeight: 0,
     noWeight: 0,
-    uri: c.uri,
+    uri: c.contentUrl ?? c.uri,
   };
 }
 

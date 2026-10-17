@@ -107,7 +107,9 @@ export interface ChainContent {
   parentId: number;
   versions: number;
   hash: string; // latest content hash
-  uri: string; // latest version uri (user-supplied label/location)
+  uri: string; // on-chain uri (points at metadata json, content file, or label)
+  title?: string; // resolved from metadata when available
+  contentUrl?: string; // resolved actual content path (meta.contentUrl or uri)
 }
 
 /**
@@ -137,6 +139,9 @@ export async function fetchAllContent(): Promise<ChainContent[]> {
           ? latest.contentHash ?? latest[0]
           : await registry.latestHash(id);
         const uri: string = latest ? latest.uri ?? latest[1] : "";
+        // If the uri points at a metadata JSON, pull the real title + the
+        // actual content path from it. Otherwise fall back to the raw uri.
+        const meta = await fetchMeta(uri);
         return {
           id,
           author,
@@ -146,6 +151,8 @@ export async function fetchAllContent(): Promise<ChainContent[]> {
           versions: vcount,
           hash,
           uri,
+          title: meta?.title,
+          contentUrl: meta?.contentUrl ?? uri,
         };
       } catch (err) {
         console.warn(`Skipping content #${id}:`, err);
@@ -157,6 +164,17 @@ export async function fetchAllContent(): Promise<ChainContent[]> {
   return results
     .filter((c): c is ChainContent => c !== null)
     .sort((a, b) => b.createdAt - a.createdAt || b.id - a.id);
+}
+
+/** Has this exact content hash already been registered? (duplicate guard) */
+export async function registryIsRegistered(hash: string): Promise<boolean> {
+  if (!isDeployed(REGISTRY_ADDRESS)) return false;
+  try {
+    return await registryRead().isRegistered(hash);
+  } catch (err) {
+    console.warn("isRegistered check failed:", err);
+    return false; // let the on-chain guard be the final authority
+  }
 }
 
 // --- Hashing ----------------------------------------------------------------
@@ -562,6 +580,48 @@ export async function uploadArticleText(
     type: "text/plain",
   });
   return uploadContent(file);
+}
+
+// --- Metadata (title/field live off-chain, since the contract has no such
+//     fields) -----------------------------------------------------------------
+
+export interface ContentMeta {
+  title: string;
+  description?: string;
+  field: string; // topic slug
+  kind: "Article" | "Image";
+  contentUrl: string; // same-origin /content/<key> path to the actual file
+  contentHash: string; // 0x SHA-256 of the actual content (== on-chain hash)
+}
+
+/**
+ * Upload a metadata JSON describing a piece. The returned url is what we store
+ * on-chain as the `uri`; views read it to get the real title + content URL.
+ */
+export async function uploadMeta(meta: ContentMeta): Promise<UploadResult> {
+  const json = JSON.stringify(meta, null, 2);
+  const file = new File([json], "meta.json", { type: "application/json" });
+  return uploadContent(file);
+}
+
+/**
+ * Given an on-chain uri, return its metadata if it points at a metadata JSON.
+ * Returns null for plain content uris, external links, or titles.
+ */
+export async function fetchMeta(uri: string): Promise<ContentMeta | null> {
+  const url = resolveContentUrl(uri);
+  if (!url) return null;
+  // Only JSON metadata objects carry a title; .txt/.png content won't parse.
+  if (!/\.json$/i.test(url)) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = (await res.json()) as ContentMeta;
+    if (data && typeof data.title === "string" && data.contentUrl) return data;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // --- Reading stored content back -------------------------------------------

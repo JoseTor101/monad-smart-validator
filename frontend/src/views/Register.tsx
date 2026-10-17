@@ -2,14 +2,37 @@ import { useState } from "react";
 import { Kind, TOPICS, isDeployed, REGISTRY_ADDRESS } from "../config";
 import { Fingerprint } from "../components";
 import {
+  registryIsRegistered,
   registryWrite,
   sha256Hex,
   sha256Text,
   uploadArticleText,
   uploadContent,
+  uploadMeta,
 } from "../web3";
 
 type Mode = "article" | "image";
+
+// Turn an ethers/wallet error into a short, human message.
+function registerErrorMessage(err: unknown): string {
+  const e = err as {
+    code?: string | number;
+    reason?: string;
+    shortMessage?: string;
+    message?: string;
+  };
+  if (e?.code === "ACTION_REJECTED" || e?.code === 4001) {
+    return "you rejected the transaction in your wallet.";
+  }
+  const reason = e?.reason ?? "";
+  if (/already registered/i.test(reason)) {
+    return "this exact content is already registered on-chain.";
+  }
+  if (/insufficient funds/i.test(e?.message ?? "")) {
+    return "insufficient MON for gas. Get testnet MON from the faucet.";
+  }
+  return e?.reason ?? e?.shortMessage ?? e?.message ?? "unknown error.";
+}
 
 export function Register({ account }: { account: string | null }) {
   const [mode, setMode] = useState<Mode>("article");
@@ -54,8 +77,9 @@ export function Register({ account }: { account: string | null }) {
     try {
       setBusy(true);
 
-      // 1) Upload the actual content to R2 (off-chain, no wallet) so the piece
-      //    can later be viewed and re-hashed to verify the on-chain fingerprint.
+      // 1) Upload the content to R2, then a small metadata JSON (title, field,
+      //    content pointer). The on-chain uri points at the metadata so views
+      //    can show the real title — the contract itself stores no title.
       //    If a uri was pasted manually (e.g. ipfs://), skip the upload.
       let finalUri = uri;
       const hasContentToUpload =
@@ -65,16 +89,23 @@ export function Register({ account }: { account: string | null }) {
       if (hasContentToUpload && !uriLooksExternal) {
         setStatus("Uploading content to storage…");
         try {
-          const result =
+          const content =
             mode === "article"
               ? await uploadArticleText(title, body)
               : await uploadContent(imageFile!);
-          finalUri = result.url;
-          // Defensive: the server hashes the same bytes, so it must match the
-          // hash we computed locally. If it ever diverges, trust the local one.
-          if (result.hash.toLowerCase() !== hash.toLowerCase()) {
-            console.warn("Server/client hash mismatch", result.hash, hash);
+          // The server hashes the same bytes, so it must match the local hash.
+          if (content.hash.toLowerCase() !== hash.toLowerCase()) {
+            console.warn("Server/client hash mismatch", content.hash, hash);
           }
+          setStatus("Saving details…");
+          const meta = await uploadMeta({
+            title: title.trim() || "Untitled",
+            field: topic,
+            kind: mode === "article" ? "Article" : "Image",
+            contentUrl: content.url,
+            contentHash: content.hash,
+          });
+          finalUri = meta.url; // store the metadata path on-chain
           setUri(finalUri);
         } catch (err) {
           console.error(err);
@@ -87,6 +118,17 @@ export function Register({ account }: { account: string | null }) {
       }
 
       // 2) Record the fingerprint + uri on-chain (the one wallet transaction).
+      // Pre-check the duplicate guard so we give a clear message instead of a
+      // generic revert.
+      const alreadyRegistered = await registryIsRegistered(hash);
+      if (alreadyRegistered) {
+        setStatus(
+          "This exact content is already registered on-chain. Change the content (even slightly) to register a new piece, or edit the existing one to add a version."
+        );
+        setBusy(false);
+        return;
+      }
+
       setStatus("Registering: confirm in your wallet…");
       const registry = await registryWrite();
       const kind = mode === "article" ? Kind.Article : Kind.Image;
@@ -101,7 +143,7 @@ export function Register({ account }: { account: string | null }) {
       setHash(null);
     } catch (err) {
       console.error(err);
-      setStatus("Registration failed or was rejected.");
+      setStatus(`Registration failed: ${registerErrorMessage(err)}`);
     } finally {
       setBusy(false);
     }
