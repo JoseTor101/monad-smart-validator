@@ -306,9 +306,10 @@ function ValidateModal({
 }
 
 // Window lengths kept short so a hackathon demo can go commit -> reveal ->
-// resolve within minutes rather than days.
-const COMMIT_WINDOW = 180; // 3 min
-const REVEAL_WINDOW = 180; // 3 min
+// resolve in a couple of minutes. These are per-round params to openRound, so
+// changing them only affects rounds opened after this change.
+const COMMIT_WINDOW = 60; // 1 min
+const REVEAL_WINDOW = 60; // 1 min
 
 function ValidateFlow({
   post,
