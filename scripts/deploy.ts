@@ -1,19 +1,39 @@
 import { ethers } from "hardhat";
 
 async function main() {
-  console.log("Deploying Greeter to Monad testnet...");
+  console.log("Deploying content-provenance contracts to Monad testnet...\n");
 
-  // Grab the compiled contract factory and deploy it.
-  // Pass constructor arguments here if your contract needs them.
-  const Greeter = await ethers.getContractFactory("Greeter");
-  const greeter = await Greeter.deploy("Hello, Monad!");
+  // 1. Reputation registry (no constructor args).
+  const Reputation = await ethers.getContractFactory("ReputationRegistry");
+  const reputation = await Reputation.deploy();
+  await reputation.waitForDeployment();
+  const reputationAddr = await reputation.getAddress();
+  console.log("ReputationRegistry:", reputationAddr);
 
-  // Wait until the deployment transaction is mined.
-  await greeter.waitForDeployment();
+  // 2. Content registry (no constructor args).
+  const Registry = await ethers.getContractFactory("ContentRegistry");
+  const registry = await Registry.deploy();
+  await registry.waitForDeployment();
+  const registryAddr = await registry.getAddress();
+  console.log("ContentRegistry:   ", registryAddr);
 
-  const address = await greeter.getAddress();
-  console.log("Greeter deployed to:", address);
-  console.log("\nNext step: paste this address into frontend/src/config.ts");
+  // 3. Validation market, wired to both of the above.
+  const Market = await ethers.getContractFactory("ValidationMarket");
+  const market = await Market.deploy(reputationAddr, registryAddr);
+  await market.waitForDeployment();
+  const marketAddr = await market.getAddress();
+  console.log("ValidationMarket:  ", marketAddr);
+
+  // 4. Authorize the market as the only contract allowed to adjust reputation.
+  //    This is a one-time, irreversible wiring step.
+  const tx = await reputation.setMarket(marketAddr);
+  await tx.wait();
+  console.log("\nReputationRegistry.setMarket(ValidationMarket) confirmed.");
+
+  console.log("\nPaste these into frontend/src/config.ts:");
+  console.log(`  REPUTATION_ADDRESS = "${reputationAddr}"`);
+  console.log(`  REGISTRY_ADDRESS   = "${registryAddr}"`);
+  console.log(`  MARKET_ADDRESS     = "${marketAddr}"`);
 }
 
 main().catch((error) => {
