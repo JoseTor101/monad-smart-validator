@@ -144,17 +144,3 @@ const SEAL_WORD: Record<SealState, string> = {
 export function sealWord(seal: SealState | null): string {
   return seal ? SEAL_WORD[seal] : "Nothing yet";
 }
-
-export const SAMPLE_PROFILE = {
-  reputation: 73,
-  registered: 12,
-  validations: 48,
-  disputesWon: 3,
-  txs: [
-    { kind: "Registered content", detail: "#7 — water telemetry report", hash: "0x8f2a1c93be77d4e5", when: "5h ago" },
-    { kind: "Validated (yes)", detail: "Round #21 · journalism", hash: "0x3c91ddee21fa0045", when: "6h ago" },
-    { kind: "Withdrew reward", detail: "+2.4 MON from round #18", hash: "0x77ddbb5512ef90aa", when: "1d ago" },
-    { kind: "Opened round", detail: "#19 on content #6 · photography", hash: "0x1b4d7e0a2f9c3851", when: "1d ago" },
-    { kind: "Disputed", detail: "Round #14 → escalated #17", hash: "0xaa11bb22cc33dd44", when: "3d ago" },
-  ],
-};

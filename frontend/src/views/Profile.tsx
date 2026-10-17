@@ -1,20 +1,52 @@
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { Avatar, RepMeter } from "../components";
-import { SAMPLE_PROFILE } from "../sampleData";
-import { MONAD_TESTNET } from "../config";
-import { shortAddr } from "../web3";
+import { Avatar, Fingerprint, RepMeter } from "../components";
+import { MONAD_TESTNET, isDeployed, REGISTRY_ADDRESS } from "../config";
+import {
+  fetchProfile,
+  shortAddr,
+  timeAgo,
+  type ChainProfile,
+} from "../web3";
 
 export function Profile({ account }: { account: string | null }) {
   const addr = account ?? "0x0000000000000000000000000000000000000000";
-  const p = SAMPLE_PROFILE;
+  const deployed = isDeployed(REGISTRY_ADDRESS);
+  const [data, setData] = useState<ChainProfile | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!account || !deployed) {
+      setData(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchProfile(account)
+      .then((p) => {
+        if (!cancelled) setData(p);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setError("Couldn't read your on-chain record.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [account, deployed]);
 
   return (
     <section>
       <div className="section" style={{ marginTop: 8 }}>
         <h2>Your standing</h2>
         <p className="sub">
-          Reputation, registrations, and the on-chain record behind them. Every
-          number here traces back to a transaction anyone can audit.
+          Reputation and registrations read straight from Monad. Every number
+          here traces back to a transaction anyone can audit.
         </p>
       </div>
 
@@ -32,45 +64,108 @@ export function Profile({ account }: { account: string | null }) {
           <div className="addr" style={{ marginTop: 4 }}>
             {shortAddr(addr)}
           </div>
-          <div style={{ maxWidth: 260, marginTop: 14 }}>
-            <RepMeter score={p.reputation} />
-          </div>
+          {account && (data?.totalReputation ?? 0) > 0 && (
+            <div style={{ maxWidth: 260, marginTop: 14 }}>
+              <RepMeter score={data!.totalReputation} />
+            </div>
+          )}
         </div>
       </motion.div>
 
-      <div className="stat-row">
-        <Stat k="Reputation" v={p.reputation} />
-        <Stat k="Content registered" v={p.registered} />
-        <Stat k="Validations cast" v={p.validations} />
-        <Stat k="Disputes won" v={p.disputesWon} />
-      </div>
+      {!account && (
+        <div className="notice info">
+          Connect your wallet to see your registrations and reputation.
+        </div>
+      )}
+      {account && !deployed && (
+        <div className="notice warn">
+          Contracts aren't deployed, so there's no on-chain record to read yet.
+        </div>
+      )}
+      {loading && (
+        <div className="notice info">Reading your record from Monad…</div>
+      )}
+      {error && <div className="notice risk">{error}</div>}
 
-      <div className="section">
-        <h2 style={{ fontSize: "1.65rem" }}>Activity</h2>
-      </div>
-      <div className="panel">
-        {p.txs.map((tx, i) => (
-          <motion.div
-            key={i}
-            className="txrow"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.05 * i, duration: 0.3 }}
-          >
-            <span className="tx-kind">{tx.kind}</span>
-            <span className="muted">{tx.detail}</span>
-            <a
-              className="tx-hash"
-              href={`${MONAD_TESTNET.blockExplorerUrl}/tx/${tx.hash}`}
-              target="_blank"
-              rel="noreferrer"
-              title="Open in explorer"
-            >
-              {tx.hash} · {tx.when}
-            </a>
-          </motion.div>
-        ))}
-      </div>
+      {account && deployed && (
+        <>
+          <div className="stat-row">
+            <Stat k="Content registered" v={data?.registered ?? 0} />
+            <Stat k="Total reputation" v={data?.totalReputation ?? 0} />
+            <Stat k="Fields with reputation" v={data?.reputation.length ?? 0} />
+          </div>
+
+          {data && data.reputation.length > 0 && (
+            <>
+              <div className="section">
+                <h2 style={{ fontSize: "1.65rem" }}>Reputation by field</h2>
+                <p className="sub">
+                  Reputation is earned per field and never transfers between
+                  them.
+                </p>
+              </div>
+              <div className="panel">
+                {data.reputation.map((r) => (
+                  <div
+                    key={r.slug}
+                    className="txrow"
+                    style={{ gap: 16 }}
+                  >
+                    <span className="tx-kind">{r.label}</span>
+                    <div style={{ flex: 1, maxWidth: 260 }}>
+                      <RepMeter score={Math.max(0, r.score)} />
+                    </div>
+                    <span className="mono muted" style={{ marginLeft: "auto" }}>
+                      {r.score}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div className="section">
+            <h2 style={{ fontSize: "1.65rem" }}>Your registrations</h2>
+          </div>
+          <div className="panel">
+            {data && data.content.length > 0 ? (
+              data.content.map((c, i) => (
+                <motion.div
+                  key={c.id}
+                  className="txrow"
+                  style={{ gap: 16 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.04 * i, duration: 0.3 }}
+                >
+                  <span className="tx-kind">
+                    #{c.id} · {c.kind}
+                  </span>
+                  <span className="muted">{c.uri?.trim() || "Untitled"}</span>
+                  <div style={{ marginLeft: "auto" }} className="row" >
+                    <Fingerprint hash={c.hash} />
+                    <a
+                      className="tx-hash"
+                      href={`${MONAD_TESTNET.blockExplorerUrl}/address/${c.author}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Open author in explorer"
+                    >
+                      {timeAgo(c.createdAt)}
+                    </a>
+                  </div>
+                </motion.div>
+              ))
+            ) : (
+              <p className="muted" style={{ fontSize: "0.9rem" }}>
+                {loading
+                  ? "Loading…"
+                  : "No registrations from this address yet. Register a piece to see it here."}
+              </p>
+            )}
+          </div>
+        </>
+      )}
     </section>
   );
 }

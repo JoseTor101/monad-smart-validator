@@ -15,6 +15,7 @@ import {
   REGISTRY_ADDRESS,
   REPUTATION_ABI,
   REPUTATION_ADDRESS,
+  TOPICS,
   isDeployed,
 } from "./config";
 
@@ -173,6 +174,64 @@ export async function sha256Text(text: string): Promise<string> {
 /** Topic id (slug) -> bytes32 used on-chain for scoped reputation. */
 export function topicHash(slug: string): string {
   return keccak256(toUtf8Bytes(slug));
+}
+
+// --- Reading a profile ------------------------------------------------------
+
+export interface TopicReputation {
+  slug: string;
+  label: string;
+  score: number;
+}
+
+export interface ChainProfile {
+  registered: number; // content registered by this address
+  content: ChainContent[]; // their registrations, newest first
+  reputation: TopicReputation[]; // per-topic score (only topics with a score)
+  totalReputation: number; // sum of positive topic scores
+}
+
+/**
+ * Read everything we can truthfully derive for an address from on-chain views:
+ * how many pieces it registered (ContentRegistry) and its per-topic reputation
+ * (ReputationRegistry). Validation/dispute counts are NOT included because the
+ * contracts expose them only as events, which a browser can't cheaply index.
+ */
+export async function fetchProfile(account: string): Promise<ChainProfile> {
+  const empty: ChainProfile = {
+    registered: 0,
+    content: [],
+    reputation: [],
+    totalReputation: 0,
+  };
+  if (!isDeployed(REGISTRY_ADDRESS) || !account) return empty;
+
+  const owner = account.toLowerCase();
+  const all = await fetchAllContent();
+  const mine = all.filter((c) => c.author.toLowerCase() === owner);
+
+  let reputation: TopicReputation[] = [];
+  if (isDeployed(REPUTATION_ADDRESS)) {
+    const rep = reputationRead();
+    const scores = await Promise.all(
+      TOPICS.map(async (t) => {
+        try {
+          const raw: bigint = await rep.reputationOf(topicHash(t.id), account);
+          return { slug: t.id, label: t.label, score: Number(raw) };
+        } catch {
+          return { slug: t.id, label: t.label, score: 0 };
+        }
+      })
+    );
+    reputation = scores.filter((s) => s.score !== 0);
+  }
+
+  const totalReputation = reputation.reduce(
+    (sum, r) => sum + Math.max(0, r.score),
+    0
+  );
+
+  return { registered: mine.length, content: mine, reputation, totalReputation };
 }
 
 // --- Formatting -------------------------------------------------------------
