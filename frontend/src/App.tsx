@@ -1,222 +1,293 @@
-import { useCallback, useEffect, useState } from "react";
-import { BrowserProvider, Contract } from "ethers";
-import { CONTRACT_ABI, CONTRACT_ADDRESS, MONAD_TESTNET } from "./config";
+import { useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { useWallet } from "./useWallet";
+import { shortAddr } from "./web3";
+import { Fingerprint, Seal } from "./components";
+import { Discovery } from "./views/Discovery";
+import { Timeline } from "./views/Timeline";
+import { Register } from "./views/Register";
+import { Profile } from "./views/Profile";
+import type { SamplePost } from "./sampleData";
+
+type View = "discover" | "timeline" | "register" | "profile";
+
+const NAV: { id: View; label: string }[] = [
+  { id: "discover", label: "Discover" },
+  { id: "timeline", label: "Timeline" },
+  { id: "register", label: "Register" },
+  { id: "profile", label: "Profile" },
+];
 
 export default function App() {
-  const [account, setAccount] = useState<string | null>(null);
-  const [greeting, setGreeting] = useState<string>("—");
-  const [status, setStatus] = useState<string>("");
-  const [busy, setBusy] = useState(false);
-  const [newGreeting, setNewGreeting] = useState<string>("");
+  const wallet = useWallet();
+  const [view, setView] = useState<View>("discover");
+  const [topicFilter, setTopicFilter] = useState<string | null>(null);
+  const [validating, setValidating] = useState<SamplePost | null>(null);
 
-  const hasWallet = typeof window !== "undefined" && !!window.ethereum;
-  const contractIsSet =
-    CONTRACT_ADDRESS !== "0x0000000000000000000000000000000000000000";
-
-  // Build a read-only contract instance (no wallet popup needed to read).
-  const getReadContract = useCallback(() => {
-    if (!window.ethereum) throw new Error("No wallet found");
-    const provider = new BrowserProvider(window.ethereum);
-    return new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-  }, []);
-
-  // Build a contract instance connected to the signer (needed to write).
-  const getWriteContract = useCallback(async () => {
-    if (!window.ethereum) throw new Error("No wallet found");
-    const provider = new BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-    return new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-  }, []);
-
-  // Read the current greeting from the chain.
-  const refreshGreeting = useCallback(async () => {
-    if (!contractIsSet) return;
-    try {
-      const contract = getReadContract();
-      const value: string = await contract.greeting();
-      setGreeting(value);
-    } catch (err) {
-      console.error(err);
-      setStatus("Could not read from the contract. Is the address correct?");
-    }
-  }, [contractIsSet, getReadContract]);
-
-  // Ask MetaMask to switch to Monad testnet, adding it if unknown.
-  const ensureMonadNetwork = useCallback(async () => {
-    if (!window.ethereum) return;
-    try {
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: MONAD_TESTNET.chainIdHex }],
-      });
-    } catch (err: unknown) {
-      // 4902 = chain not added to wallet yet, so add it.
-      const code = (err as { code?: number })?.code;
-      if (code === 4902) {
-        await window.ethereum.request({
-          method: "wallet_addEthereumChain",
-          params: [
-            {
-              chainId: MONAD_TESTNET.chainIdHex,
-              chainName: MONAD_TESTNET.chainName,
-              rpcUrls: [MONAD_TESTNET.rpcUrl],
-              nativeCurrency: MONAD_TESTNET.currency,
-              blockExplorerUrls: [MONAD_TESTNET.blockExplorerUrl],
-            },
-          ],
-        });
-      } else {
-        throw err;
-      }
-    }
-  }, []);
-
-  // Connect the wallet and make sure we're on Monad testnet.
-  const connect = useCallback(async () => {
-    if (!window.ethereum) {
-      setStatus("MetaMask not found. Install it to continue.");
-      return;
-    }
-    try {
-      setBusy(true);
-      const provider = new BrowserProvider(window.ethereum);
-      const accounts = await provider.send("eth_requestAccounts", []);
-      await ensureMonadNetwork();
-      setAccount(accounts[0]);
-      setStatus("Wallet connected.");
-      await refreshGreeting();
-    } catch (err) {
-      console.error(err);
-      setStatus("Connection failed or was rejected.");
-    } finally {
-      setBusy(false);
-    }
-  }, [ensureMonadNetwork, refreshGreeting]);
-
-  // Generic helper: send a transaction and wait for it to be mined.
-  const sendTx = useCallback(
-    async (
-      label: string,
-      action: (c: Contract) => Promise<{ wait: () => Promise<unknown>; hash: string }>
-    ) => {
-      if (!account) {
-        setStatus("Connect your wallet first.");
-        return;
-      }
-      try {
-        setBusy(true);
-        setStatus(`${label}: sending transaction...`);
-        const contract = await getWriteContract();
-        const tx = await action(contract);
-        setStatus(`${label}: waiting for confirmation... (${tx.hash.slice(0, 10)}…)`);
-        await tx.wait();
-        setStatus(`${label}: confirmed!`);
-        await refreshGreeting();
-      } catch (err) {
-        console.error(err);
-        setStatus(`${label} failed or was rejected.`);
-      } finally {
-        setBusy(false);
-      }
-    },
-    [account, getWriteContract, refreshGreeting]
-  );
-
-  const handleSetGreeting = () => {
-    if (newGreeting.trim() === "") {
-      setStatus("Enter a value first.");
-      return;
-    }
-    sendTx("Set greeting", (c) => c.setGreeting(newGreeting));
-  };
-
-  // Load the greeting once on mount (read-only, no wallet prompt).
-  useEffect(() => {
-    if (hasWallet && contractIsSet) refreshGreeting();
-  }, [hasWallet, contractIsSet, refreshGreeting]);
-
-  // React to the user switching accounts in MetaMask.
-  useEffect(() => {
-    if (!window.ethereum?.on) return;
-    const handleAccountsChanged = (...args: unknown[]) => {
-      const accounts = args[0] as string[];
-      setAccount(accounts[0] ?? null);
-    };
-    window.ethereum.on("accountsChanged", handleAccountsChanged);
-    return () => {
-      window.ethereum?.removeListener?.("accountsChanged", handleAccountsChanged);
-    };
-  }, []);
+  function pickTopic(slug: string) {
+    setTopicFilter((cur) => (cur === slug ? null : slug));
+    setView("timeline");
+  }
 
   return (
-    <main className="container">
-      <h1>🟣 Monad dApp Starter</h1>
-      <p className="subtitle">
-        A starter UI reading &amp; writing on-chain state on the Monad testnet.
-      </p>
-
-      {!hasWallet && (
-        <div className="banner error">
-          No wallet detected. Install{" "}
-          <a href="https://metamask.io" target="_blank" rel="noreferrer">
-            MetaMask
-          </a>{" "}
-          to use this app.
-        </div>
-      )}
-
-      {!contractIsSet && (
-        <div className="banner warn">
-          Contract address not set yet. Deploy the contract, then paste the
-          address into <code>frontend/src/config.ts</code>.
-        </div>
-      )}
-
-      <div className="card">
-        <div className="value-display">{greeting}</div>
-        <div className="value-label">current on-chain value</div>
-      </div>
-
-      {!account ? (
-        <button className="primary" onClick={connect} disabled={busy || !hasWallet}>
-          {busy ? "Connecting..." : "Connect Wallet"}
-        </button>
-      ) : (
-        <>
-          <div className="account">
-            Connected: <code>{account.slice(0, 6)}…{account.slice(-4)}</code>
+    <>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="brand">
+            <SealMark />
+            SmartValidator
           </div>
-
-          <div className="set-row">
-            <input
-              type="text"
-              placeholder="new value..."
-              value={newGreeting}
-              onChange={(e) => setNewGreeting(e.target.value)}
-              disabled={busy}
-            />
-            <button className="primary" onClick={handleSetGreeting} disabled={busy}>
-              Set
-            </button>
-          </div>
-
-          <button className="ghost" onClick={refreshGreeting} disabled={busy}>
-            ↻ Refresh
+          <nav className="nav">
+            {NAV.map((n) => (
+              <button
+                key={n.id}
+                data-active={view === n.id}
+                onClick={() => setView(n.id)}
+              >
+                {n.label}
+              </button>
+            ))}
+          </nav>
+          <span className="spacer" />
+          <button
+            className="wallet"
+            onClick={wallet.connect}
+            disabled={wallet.connecting}
+          >
+            {wallet.account && <span className="dot" />}
+            {wallet.account
+              ? shortAddr(wallet.account)
+              : wallet.connecting
+              ? "Connecting…"
+              : "Connect wallet"}
           </button>
-        </>
-      )}
+        </div>
+      </header>
 
-      {status && <div className="status">{status}</div>}
+      <main className="shell">
+        {view === "discover" && <Hero onStart={() => setView("register")} />}
 
-      <footer>
-        <a href={MONAD_TESTNET.blockExplorerUrl} target="_blank" rel="noreferrer">
-          Block explorer
-        </a>{" "}
-        ·{" "}
-        <a href="https://faucet.monad.xyz" target="_blank" rel="noreferrer">
-          Get testnet MON
-        </a>
-      </footer>
-    </main>
+        {!wallet.installed && (
+          <div className="notice warn">
+            No wallet detected. Install{" "}
+            <a href="https://metamask.io" target="_blank" rel="noreferrer">
+              MetaMask
+            </a>{" "}
+            to register content or cast validations.
+          </div>
+        )}
+        {wallet.error && <div className="notice risk">{wallet.error}</div>}
+
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={view + (topicFilter ?? "")}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+          >
+            {view === "discover" && (
+              <Discovery active={topicFilter} onPick={pickTopic} />
+            )}
+            {view === "timeline" && (
+              <Timeline
+                filter={topicFilter}
+                onClearFilter={() => setTopicFilter(null)}
+                onValidate={setValidating}
+              />
+            )}
+            {view === "register" && <Register account={wallet.account} />}
+            {view === "profile" && <Profile account={wallet.account} />}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+
+      <AnimatePresence>
+        {validating && (
+          <ValidateModal
+            post={validating}
+            account={wallet.account}
+            onClose={() => setValidating(null)}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+/* --- Hero: the first, most characteristic thing a visitor sees ----------- */
+
+function Hero({ onStart }: { onStart: () => void }) {
+  return (
+    <section className="hero">
+      <motion.h1
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+      >
+        Proof of who made it, and everything that changed since.
+      </motion.h1>
+      <motion.p
+        className="lede"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.08, duration: 0.5, ease: "easeOut" }}
+      >
+        Register an article or image, and its fingerprint, author, and timestamp
+        are sealed on Monad. The community stakes its reputation to vouch for
+        what's original — and can dispute anything that isn't.
+      </motion.p>
+      <motion.div
+        className="hero-fingerprint row wrap"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.2, duration: 0.5 }}
+      >
+        <Fingerprint
+          hash="0x8f2a1c93be77d4e5a0b1c2d3e4f50617a8b9c0d1e2f3041526378490abcdef12"
+          verified
+        />
+        <Seal state="verified" />
+        <button className="btn btn-primary" onClick={onStart}>
+          Register your work
+        </button>
+      </motion.div>
+    </section>
+  );
+}
+
+/* --- Validate modal: commit–reveal explained in plain language ----------- */
+
+function ValidateModal({
+  post,
+  account,
+  onClose,
+}: {
+  post: SamplePost;
+  account: string | null;
+  onClose: () => void;
+}) {
+  const [choice, setChoice] = useState<boolean | null>(null);
+  const [stake, setStake] = useState("0.1");
+  const disputed = post.seal === "disputed";
+
+  return (
+    <motion.div
+      className="overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="modal"
+        initial={{ opacity: 0, scale: 0.96, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.98, y: 6 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h3 style={{ fontSize: "1.25rem" }}>
+            {disputed ? "Dispute in progress" : "Validate this piece"}
+          </h3>
+          <button className="btn btn-ghost" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        <p className="muted" style={{ fontSize: "0.9rem", marginTop: 6 }}>
+          {post.title}
+        </p>
+
+        <div style={{ margin: "16px 0" }}>
+          <Fingerprint hash={post.hash} verified={post.seal === "verified"} />
+        </div>
+
+        {disputed ? (
+          <div className="notice risk">
+            An escalated round is open at double the original stake. Majority by
+            staked weight settles it; the losing side is slashed.
+          </div>
+        ) : (
+          <>
+            <p className="muted" style={{ fontSize: "0.85rem" }}>
+              Your vote is hidden until the reveal phase (commit–reveal), so no
+              one can copy the leader or buy a visible vote. Stake backs your
+              judgement — vote with the outcome and you earn, against it and
+              you're slashed.
+            </p>
+
+            <div className="row" style={{ gap: 10, margin: "16px 0" }}>
+              <button
+                className={`btn${choice === true ? " btn-teal" : ""}`}
+                onClick={() => setChoice(true)}
+                style={{ flex: 1 }}
+              >
+                Original / true
+              </button>
+              <button
+                className={`btn${choice === false ? " btn-primary" : ""}`}
+                onClick={() => setChoice(false)}
+                style={{ flex: 1 }}
+              >
+                Not original
+              </button>
+            </div>
+
+            <label className="field">
+              <span>Stake (MON)</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={stake}
+                onChange={(e) => setStake(e.target.value)}
+              />
+            </label>
+          </>
+        )}
+
+        <button
+          className="btn btn-primary"
+          style={{ width: "100%" }}
+          disabled={!account || (!disputed && choice === null)}
+          onClick={onClose}
+        >
+          {!account
+            ? "Connect wallet to continue"
+            : disputed
+            ? "Join the dispute"
+            : "Commit vote"}
+        </button>
+
+        <p
+          className="muted"
+          style={{ fontSize: "0.75rem", marginTop: 12, textAlign: "center" }}
+        >
+          Preview: wiring to the ValidationMarket contract activates once
+          deployed.
+        </p>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function SealMark() {
+  return (
+    <svg className="seal-mark" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 2l2.4 1.8 3 .1 1 2.8 2.3 1.9-.8 2.9.8 2.9-2.3 1.9-1 2.8-3 .1L12 22l-2.4-1.8-3-.1-1-2.8L3.3 15l.8-2.9-.8-2.9 2.3-1.9 1-2.8 3-.1L12 2z"
+        fill="#6c4df5"
+        opacity="0.22"
+      />
+      <path
+        d="M8 12.5l2.5 2.5L16 9"
+        stroke="#22c5a8"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
