@@ -1,254 +1,891 @@
+/* =========================================================================
+   SmartValidator — design system (refreshed)
+   Subject: content provenance / authorship / community truth on Monad.
+
+   Refresh per wip/design-system-brief.md + R1 "Neutral ground":
+   - Grounds, surfaces, borders and ink are TRUE NEUTRAL (no violet tint),
+     so the one real violet (the action) and teal (verified) stand out.
+   - Teal is semantic only: verified / trust. Never decorative.
+   - Radius drops to 8px controls / 12px panels. No background glows,
+     no gradient washes on tiles. Field hue shrinks to an 8px dot.
+   - Paper (--paper) is reserved for the provenance record card.
+   - Light mode is a full theme via [data-theme="light"]; it keeps the
+     same semantics (teal switches to --teal-ink for contrast on light).
+   ========================================================================= */
+
 :root {
-  --purple: #7c3aed;
-  --purple-dark: #5b21b6;
-  --bg: #0f0f17;
-  --card: #1a1a2e;
-  --text: #e8e8f0;
-  --muted: #9a9ab0;
+  /* ---- Signal colors (shared across themes) ---- */
+  --violet: #6c4df5;
+  --violet-hover: #5a3be6;
+  --violet-soft: #b4a6ff;
+  --teal: #22c5a8;
+  --teal-ink: #08705d; /* verified text on light/paper surfaces */
+  --warning: #f2b544;
+  --risk: #ef5a6f;
+
+  /* ---- Dark theme ground + ink (default) ---- */
+  --night: #0b0b0f; /* page background base */
+  --surface: #141419; /* panels, inputs */
+  --surface-2: #1c1c23; /* hover, tracks, selected */
+  --line: #26262e; /* borders, dividers */
+  --line-strong: #34343e; /* input borders, hover */
+  --ink: #f2f2f5; /* headings */
+  --ink-body: #d6d6dc; /* body text */
+  --ink-dim: #a0a0ab; /* secondary */
+  --ink-faint: #82828e; /* tertiary / meta */
+
+  /* Paper surface (provenance record only) */
+  --paper: #edeef1;
+  --paper-ink: #1a1a1f;
+  --paper-dim: #5a5a66;
+  --paper-line: #d7d8de;
+
+  /* Link + verified-on-dark */
+  --link: var(--violet-soft);
+  --verified-ink: var(--teal);
+
+  /* ---- Type ---- */
+  --display: "Space Grotesk", system-ui, sans-serif;
+  --body: "Inter", system-ui, sans-serif;
+  --mono: "Space Mono", ui-monospace, monospace;
+
+  /* Scale (1.25 minor third) */
+  --t-xs: 0.75rem;
+  --t-sm: 0.875rem;
+  --t-base: 1rem;
+  --t-md: 1.25rem;
+  --t-lg: 1.65rem;
+  --t-xl: 2.4rem;
+  --t-2xl: 3.4rem;
+  --t-3xl: 4.6rem;
+
+  /* ---- Shape ---- */
+  --radius: 8px; /* controls, inputs, small cards */
+  --radius-lg: 12px; /* panels, tiles, modals */
+  --maxw: 1180px;
+
+  color-scheme: dark;
+}
+
+/* =========================================================================
+   LIGHT THEME — same token names, inverted ground/ink.
+   Teal as a fill still works; teal as *text* uses --teal-ink for contrast.
+   ========================================================================= */
+[data-theme="light"] {
+  --night: #ffffff;
+  --surface: #f6f6f8;
+  --surface-2: #ececf0;
+  --line: #e2e2e8;
+  --line-strong: #cfcfd8;
+  --ink: #101014;
+  --ink-body: #2c2c34;
+  --ink-dim: #5b5b66;
+  --ink-faint: #82828e;
+
+  /* On light, the provenance card inverts to a dark "receipt" so it still
+     reads as the one thing worth staring at. */
+  --paper: #141419;
+  --paper-ink: #f2f2f5;
+  --paper-dim: #a0a0ab;
+  --paper-line: #2a2a32;
+
+  --link: var(--violet-hover);
+  --verified-ink: var(--teal-ink);
+
+  color-scheme: light;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background: radial-gradient(1200px 600px at 50% -10%, #1e1b3a, var(--bg));
-  color: var(--text);
+  font-family: var(--body);
+  font-size: var(--t-base);
+  line-height: 1.55;
+  color: var(--ink-body);
+  background: var(--night); /* flat neutral ground — no radial glows */
   min-height: 100vh;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
-.container {
-  max-width: 440px;
-  margin: 0 auto;
-  padding: 48px 20px;
-  text-align: center;
-}
-
-h1 {
+h1, h2, h3, h4 {
+  font-family: var(--display);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
   margin: 0;
-  font-size: 2rem;
-}
-
-.subtitle {
-  color: var(--muted);
-  margin-top: 6px;
-}
-
-.card {
-  background: var(--card);
-  border: 1px solid #2a2a45;
-  border-radius: 16px;
-  padding: 28px;
-  margin: 24px 0;
-}
-
-.value-display {
-  font-size: 2rem;
-  font-weight: 800;
-  line-height: 1.2;
-  color: var(--purple);
-  word-break: break-word;
-}
-
-.value-label {
-  color: var(--muted);
-  margin-top: 8px;
-  font-size: 0.9rem;
-}
-
-button {
-  cursor: pointer;
-  border: 1px solid #33334f;
-  background: #232338;
-  color: var(--text);
-  padding: 12px 18px;
-  border-radius: 10px;
-  font-size: 1rem;
-  transition: transform 0.05s ease, background 0.2s ease;
-}
-
-button:hover:not(:disabled) {
-  background: #2c2c44;
-}
-
-button:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-button.primary {
-  background: var(--purple);
-  border-color: var(--purple);
-}
-
-button.primary:hover:not(:disabled) {
-  background: var(--purple-dark);
-}
-
-button.ghost {
-  background: transparent;
-  margin-top: 14px;
-}
-
-.set-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.set-row input {
-  flex: 1;
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid #33334f;
-  background: #14141f;
-  color: var(--text);
-  font-size: 1rem;
-}
-
-.account {
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-
-.status {
-  margin-top: 20px;
-  padding: 12px;
-  border-radius: 10px;
-  background: #14141f;
-  border: 1px solid #2a2a45;
-  font-size: 0.9rem;
-  word-break: break-word;
-}
-
-.banner {
-  padding: 12px;
-  border-radius: 10px;
-  margin: 12px 0;
-  font-size: 0.9rem;
-}
-
-.banner.error {
-  background: #3a1420;
-  border: 1px solid #7a2540;
-}
-
-.banner.warn {
-  background: #3a2f14;
-  border: 1px solid #7a5f25;
-}
-
-code {
-  background: #14141f;
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-size: 0.85em;
+  color: var(--ink);
 }
 
 a {
-  color: var(--purple);
+  color: var(--link);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--ink);
 }
 
-footer {
-  margin-top: 32px;
-  color: var(--muted);
-  font-size: 0.85rem;
+button {
+  font-family: var(--body);
+  cursor: pointer;
 }
 
-/* Content provenance registry UI */
-.container {
-  max-width: 680px;
-  text-align: left;
+::selection {
+  background: var(--violet);
+  color: #fff;
 }
+
+/* --- Layout shell -------------------------------------------------------- */
+
+.shell {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 24px 96px;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  width: 100%;
+  backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--night) 82%, transparent);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 16px 24px;
+  max-width: var(--maxw);
+  margin: 0 auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: var(--t-md);
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.brand .seal-mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+}
+
+.nav {
+  display: flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.nav button {
+  background: transparent;
+  border: none;
+  color: var(--ink-dim);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  transition: color 0.15s, background 0.15s;
+}
+.nav button:hover {
+  color: var(--ink);
+}
+.nav button[data-active="true"] {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+.topbar .spacer {
+  flex: 1;
+}
+
+/* --- Theme toggle -------------------------------------------------------- */
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-dim);
+  transition: color 0.15s, border-color 0.15s, transform 0.05s;
+}
+.theme-toggle:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.theme-toggle:active {
+  transform: scale(0.94);
+}
+.theme-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* --- Wallet pill --------------------------------------------------------- */
 
 .wallet {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  padding: 9px 15px;
+  border-radius: 999px;
+  transition: border-color 0.15s, transform 0.05s;
+}
+.wallet:hover {
+  border-color: var(--violet);
+}
+.wallet:active {
+  transform: scale(0.98);
+}
+.wallet .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 0 3px rgba(34, 197, 168, 0.18);
+}
+
+/* --- Buttons ------------------------------------------------------------- */
+
+.btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  padding: 11px 18px;
+  border-radius: var(--radius);
+  transition: border-color 0.15s, background 0.15s, transform 0.05s;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--violet);
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.985);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--violet);
+  border-color: var(--violet);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--violet-hover);
+  border-color: var(--violet-hover);
+}
+.btn-teal {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #04221c;
+  font-weight: 600;
+}
+.btn-ghost {
+  background: transparent;
+  border-color: var(--line);
+}
+
+/* --- Hero ---------------------------------------------------------------- */
+
+.hero {
+  padding: 56px 0 44px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 40px;
+}
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 48px;
+  align-items: center;
+}
+.hero h1 {
+  padding-top: 4px; /* guard against display font ascender clipping */
+  font-size: var(--t-2xl);
+  max-width: 13ch;
+}
+.hero .lede {
+  margin-top: 22px;
+  max-width: 48ch;
+  color: var(--ink-dim);
+  font-size: var(--t-md);
+  line-height: 1.5;
+}
+.hero-actions {
+  margin-top: 30px;
+  gap: 22px;
+}
+
+/* --- Provenance record (the one paper surface) --------------------------- */
+
+.record {
+  background: var(--paper);
+  color: var(--paper-ink);
+  border: 1px solid var(--paper-line);
+  border-radius: var(--radius-lg);
+  padding: 22px 24px;
+  box-shadow: 0 24px 60px -34px rgba(0, 0, 0, 0.55);
+}
+.record .record-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  color: var(--paper-dim);
+}
+.record h3 {
+  color: var(--paper-ink);
+  font-size: var(--t-lg);
+  margin: 16px 0 14px;
+}
+.record .record-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 11px 0;
+  border-top: 1px solid var(--paper-line);
+  font-size: var(--t-sm);
+}
+.record .record-row .k {
+  color: var(--paper-dim);
+  min-width: 92px;
+}
+.record .record-row .v {
+  font-family: var(--mono);
+  color: var(--paper-ink);
+}
+/* On paper, verified text must use the darker teal to pass contrast. */
+.record .seal.verified {
+  background: rgba(8, 112, 93, 0.12);
+  color: var(--teal-ink);
+}
+
+/* --- Fingerprint (functional hash chip) ---------------------------------- */
+
+.fingerprint {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  color: var(--ink-dim);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 7px 12px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.fingerprint:hover {
+  border-color: var(--violet);
+  color: var(--ink);
+}
+.fingerprint.verified {
+  border-color: color-mix(in srgb, var(--teal) 50%, transparent);
+  color: var(--verified-ink);
+}
+.fingerprint .glyphs {
+  display: inline-flex;
+  gap: 2px;
+}
+.fingerprint .glyphs i {
+  width: 4px;
+  height: 14px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+/* --- Seal (verification state) ------------------------------------------- */
+
+.seal {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  padding: 4px 10px 4px 7px;
+  border-radius: 999px;
+  letter-spacing: 0.01em;
+}
+.seal svg {
+  width: 15px;
+  height: 15px;
+}
+.seal.verified {
+  background: rgba(34, 197, 168, 0.12);
+  color: var(--verified-ink);
+}
+.seal.contested {
+  background: rgba(242, 181, 68, 0.12);
+  color: var(--warning);
+}
+.seal.disputed {
+  background: rgba(239, 90, 111, 0.13);
+  color: var(--risk);
+}
+.seal.pending {
+  background: var(--surface-2);
+  color: var(--ink-faint);
+}
+
+/* --- Reputation meter ---------------------------------------------------- */
+
+.repmeter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.repmeter .track {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.repmeter .fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--violet), var(--teal));
+}
+.repmeter .num {
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  color: var(--ink-dim);
+  min-width: 42px;
+  text-align: right;
+}
+
+/* --- Section heading ----------------------------------------------------- */
+
+.section {
+  margin: 56px 0 20px;
+}
+.section h2 {
+  font-size: var(--t-xl);
+}
+.section p.sub {
+  margin: 8px 0 0;
+  color: var(--ink-dim);
+  max-width: 56ch;
+}
+
+/* --- Discovery: fields as a hairline list (R2) --------------------------- */
+
+.field-list {
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+.field-row {
+  display: grid;
+  grid-template-columns: 1.6fr 0.5fr 1fr 1.6fr 0.6fr;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  padding: 18px 8px;
+  color: inherit;
+  transition: background 0.14s;
+}
+.field-row:hover {
+  background: var(--surface);
+}
+.field-row[data-active="true"] {
+  background: var(--surface);
+}
+.field-row.head {
+  cursor: default;
+  padding: 0 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.field-row.head:hover {
+  background: transparent;
+}
+.field-row .col-head {
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  letter-spacing: 0.01em;
+}
+.field-name {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 16px 0;
+}
+/* The field hue is reduced to a single 8px dot — no washes, no tinted card. */
+.field-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--dot, var(--violet));
+}
+.field-dot.d-journalism  { --dot: var(--violet); }
+.field-dot.d-photography { --dot: var(--teal); }
+.field-dot.d-research    { --dot: var(--violet-soft); }
+.field-dot.d-art         { --dot: var(--risk); }
+.field-dot.d-opinion     { --dot: var(--warning); }
+.field-dot.d-docs        { --dot: var(--ink-dim); }
+.field-name .fn-label {
+  font-family: var(--display);
+  font-weight: 600;
+  color: var(--ink);
+  font-size: var(--t-base);
+}
+.field-name .fn-blurb {
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  margin-top: 2px;
+}
+.field-count {
+  font-family: var(--mono);
+  color: var(--ink);
+}
+.field-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-sm);
+  color: var(--ink-dim);
+}
+.field-status .sdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ink-faint);
+}
+.field-status.s-verified .sdot { background: var(--teal); }
+.field-status.s-contested .sdot { background: var(--warning); }
+.field-status.s-disputed .sdot { background: var(--risk); }
+.field-status.s-pending .sdot { background: var(--ink-faint); }
+.field-latest {
+  color: var(--ink);
+  font-size: var(--t-sm);
+}
+.field-latest.empty a {
+  color: var(--link);
+}
+.field-updated {
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  text-align: right;
+}
+.discovery-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
-.tabs {
-  display: flex;
-  gap: 8px;
+/* --- Timeline ------------------------------------------------------------ */
+
+.timeline {
+  position: relative;
+  margin-top: 8px;
+  padding-left: 28px;
+}
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: linear-gradient(var(--line-strong), transparent);
+}
+.post {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 20px 22px;
   margin-bottom: 16px;
 }
+.post::before {
+  content: "";
+  position: absolute;
+  left: -28px;
+  top: 24px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--night);
+  border: 2px solid var(--violet);
+}
+.post.is-verified::before {
+  border-color: var(--teal);
+}
+.post .post-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.post h3 {
+  font-size: var(--t-md);
+}
+.post .desc {
+  margin: 8px 0 16px;
+  color: var(--ink-dim);
+  font-size: var(--t-sm);
+  max-width: 68ch;
+}
+.post .post-foot {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.post .meta {
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+
+/* --- Panels / forms ------------------------------------------------------ */
 
 .panel {
-  background: var(--card);
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 26px;
 }
-
-.panel h2,
-.panel h3 {
-  margin: 0;
+.field {
+  display: block;
+  margin-bottom: 16px;
 }
-
-.panel textarea,
-.panel input[type="url"],
-.panel input[type="number"],
-.container > .row input[type="number"] {
+.field label,
+.field > span {
+  display: block;
+  font-size: var(--t-sm);
+  color: var(--ink-dim);
+  margin-bottom: 7px;
+}
+.field input,
+.field textarea,
+.field select {
   width: 100%;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #33334d;
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
+  background: var(--night);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: var(--t-base);
+  padding: 11px 13px;
 }
+.field textarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
+  outline: 2px solid var(--violet);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+/* --- Profile ------------------------------------------------------------- */
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  flex: none;
+}
+.addr {
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  color: var(--ink-dim);
+}
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+.stat {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.stat .k {
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+.stat .v {
+  font-family: var(--display);
+  font-size: var(--t-xl);
+  color: var(--ink);
+  margin-top: 4px;
+}
+
+/* --- Notices / banners --------------------------------------------------- */
+
+.notice {
+  border-radius: var(--radius);
+  padding: 13px 16px;
+  font-size: var(--t-sm);
+  margin: 14px 0;
+  border: 1px solid transparent;
+}
+.notice.warn {
+  background: rgba(242, 181, 68, 0.1);
+  border-color: rgba(242, 181, 68, 0.3);
+  color: color-mix(in srgb, var(--warning) 70%, var(--ink));
+}
+.notice.info {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink-dim);
+}
+.notice.risk {
+  background: rgba(239, 90, 111, 0.1);
+  border-color: rgba(239, 90, 111, 0.3);
+  color: color-mix(in srgb, var(--risk) 72%, var(--ink));
+}
+
+/* --- Transaction log row ------------------------------------------------- */
+
+.txrow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--t-sm);
+}
+.txrow:last-child {
+  border-bottom: none;
+}
+.txrow .tx-kind {
+  font-family: var(--display);
+  font-weight: 500;
+  color: var(--ink);
+  min-width: 140px;
+}
+.txrow .tx-hash {
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  margin-left: auto;
+}
+
+/* --- Utilities ----------------------------------------------------------- */
 
 .row {
   display: flex;
+  gap: 12px;
   align-items: center;
-  gap: 12px;
+}
+.wrap {
   flex-wrap: wrap;
-  margin-bottom: 12px;
+}
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 28px;
+  align-items: start;
+}
+.muted {
+  color: var(--ink-dim);
+}
+.mono {
+  font-family: var(--mono);
 }
 
-.panel .row {
+/* --- Responsive ---------------------------------------------------------- */
+
+@media (max-width: 860px) {
+  .grid-2 { grid-template-columns: 1fr; }
+  .hero-grid { grid-template-columns: 1fr; gap: 32px; }
+  .hero h1 { font-size: var(--t-xl); }
+  .nav { display: none; }
+  .field-row {
+    grid-template-columns: 1.4fr 0.6fr 1fr;
+    gap: 12px;
+  }
+  .field-row .field-latest,
+  .field-row .field-updated,
+  .field-row.head .col-latest,
+  .field-row.head .col-updated {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* --- Modal / overlay ----------------------------------------------------- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 8, 12, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.modal {
+  width: 100%;
+  max-width: 460px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+
+.modal .field {
   margin-bottom: 0;
-}
-
-.hint {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.result {
-  border: 1px solid #33334d;
-  border-radius: 8px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.result.none {
-  color: var(--muted);
-}
-
-.timeline {
-  margin: 0;
-  padding-left: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.subpanel {
-  border-top: 1px solid #33334d;
-  padding-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
