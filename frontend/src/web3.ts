@@ -1,8 +1,11 @@
 import {
+  AbiCoder,
   BrowserProvider,
   Contract,
   JsonRpcProvider,
+  hexlify,
   keccak256,
+  randomBytes,
   toUtf8Bytes,
   type Eip1193Provider,
 } from "ethers";
@@ -11,6 +14,7 @@ import {
   MARKET_ABI,
   MARKET_ADDRESS,
   MONAD_TESTNET,
+  Phase,
   REGISTRY_ABI,
   REGISTRY_ADDRESS,
   REPUTATION_ABI,
@@ -18,6 +22,8 @@ import {
   TOPICS,
   isDeployed,
 } from "./config";
+
+export { Phase };
 
 export const hasWallet = () =>
   typeof window !== "undefined" && !!window.ethereum;
@@ -257,4 +263,250 @@ export function timeAgo(tsSeconds: number | bigint): string {
   const days = Math.floor(hrs / 24);
   if (days < 30) return `${days}d ago`;
   return new Date(ts).toLocaleDateString();
+}
+
+// --- Validation market (commit–reveal) -------------------------------------
+// (Phase is added to the top-of-file config import.)
+
+export interface RoundState {
+  roundId: number;
+  contentId: number;
+  topic: string; // bytes32
+  commitDeadline: number; // unix seconds
+  revealDeadline: number;
+  minStake: bigint;
+  escalationLevel: number;
+  parentRound: number;
+  yesWeight: bigint;
+  noWeight: bigint;
+  outcome: boolean;
+  phase: Phase;
+}
+
+export interface MyVote {
+  stake: bigint;
+  revealed: boolean;
+  choice: boolean;
+  claimed: boolean;
+  committed: boolean; // stake > 0 means a commitment exists
+}
+
+export const marketDeployed = () => isDeployed(MARKET_ADDRESS);
+
+/** Read a round's full state, or null if it doesn't exist / market undeployed. */
+export async function getRound(roundId: number): Promise<RoundState | null> {
+  if (!marketDeployed() || roundId <= 0) return null;
+  try {
+    const m = marketRead();
+    const r = await m.getRound(roundId);
+    const phase = Number(r.phase ?? r[10]) as Phase;
+    if (phase === Phase.None) return null;
+    return {
+      roundId,
+      contentId: Number(r.contentId ?? r[0]),
+      topic: r.topic ?? r[1],
+      commitDeadline: Number(r.commitDeadline ?? r[2]),
+      revealDeadline: Number(r.revealDeadline ?? r[3]),
+      minStake: BigInt(r.minStake ?? r[4]),
+      escalationLevel: Number(r.escalationLevel ?? r[5]),
+      parentRound: Number(r.parentRound ?? r[6]),
+      yesWeight: BigInt(r.yesWeight ?? r[7]),
+      noWeight: BigInt(r.noWeight ?? r[8]),
+      outcome: Boolean(r.outcome ?? r[9]),
+      phase,
+    };
+  } catch (err) {
+    console.warn(`getRound(${roundId}) failed:`, err);
+    return null;
+  }
+}
+
+/**
+ * Find the active (or most recent) round for a content+topic. The contract
+ * tracks activeRoundFor by keccak(contentId, topic); if that's 0 we scan
+ * recent rounds for a match so resolved rounds still surface in the UI.
+ */
+export async function findRoundFor(
+  contentId: number,
+  topicSlug: string
+): Promise<RoundState | null> {
+  if (!marketDeployed()) return null;
+  const m = marketRead();
+  const topic = topicHash(topicSlug);
+
+  // Fast path: an active (non-resolved) round is indexed on-chain.
+  try {
+    const key = keccak256(
+      AbiCoder.defaultAbiCoder().encode(
+        ["uint256", "bytes32"],
+        [contentId, topic]
+      )
+    );
+    const active: bigint = await m.activeRoundFor(key);
+    if (Number(active) > 0) return getRound(Number(active));
+  } catch {
+    /* activeRoundFor may revert if not present; fall through to scan */
+  }
+
+  // Slow path: scan rounds newest-first for one matching this content+topic.
+  try {
+    const next: bigint = await m.nextRound();
+    const total = Number(next) - 1;
+    for (let id = total; id >= 1; id--) {
+      const r = await getRound(id);
+      if (r && r.contentId === contentId && r.topic === topic) return r;
+    }
+  } catch (err) {
+    console.warn("findRoundFor scan failed:", err);
+  }
+  return null;
+}
+
+/** This wallet's vote in a round. */
+export async function getMyVote(
+  roundId: number,
+  account: string
+): Promise<MyVote | null> {
+  if (!marketDeployed() || roundId <= 0 || !account) return null;
+  try {
+    const m = marketRead();
+    const v = await m.voteOf(roundId, account);
+    const stake = BigInt(v.stake ?? v[0]);
+    return {
+      stake,
+      revealed: Boolean(v.revealed ?? v[1]),
+      choice: Boolean(v.choice ?? v[2]),
+      claimed: Boolean(v.claimed ?? v[3]),
+      committed: stake > 0n,
+    };
+  } catch (err) {
+    console.warn(`getMyVote(${roundId}) failed:`, err);
+    return null;
+  }
+}
+
+// --- Commitment + salt persistence -----------------------------------------
+
+/** commitment = keccak256(abi.encode(choice, salt, voter)) — mirrors the contract. */
+export function hashCommitment(
+  choice: boolean,
+  salt: string,
+  voter: string
+): string {
+  return keccak256(
+    AbiCoder.defaultAbiCoder().encode(
+      ["bool", "bytes32", "address"],
+      [choice, salt, voter]
+    )
+  );
+}
+
+export function randomSalt(): string {
+  return hexlify(randomBytes(32));
+}
+
+// The salt + choice must survive until the reveal phase (possibly a later
+// session), or the vote is forfeited. Persist locally, keyed by round+voter.
+interface StoredCommit {
+  choice: boolean;
+  salt: string;
+}
+function commitKey(roundId: number, voter: string): string {
+  return `sv-commit:${roundId}:${voter.toLowerCase()}`;
+}
+export function saveCommit(
+  roundId: number,
+  voter: string,
+  data: StoredCommit
+): void {
+  try {
+    localStorage.setItem(commitKey(roundId, voter), JSON.stringify(data));
+  } catch {
+    /* storage may be unavailable */
+  }
+}
+export function loadCommit(
+  roundId: number,
+  voter: string
+): StoredCommit | null {
+  try {
+    const raw = localStorage.getItem(commitKey(roundId, voter));
+    return raw ? (JSON.parse(raw) as StoredCommit) : null;
+  } catch {
+    return null;
+  }
+}
+
+// --- Market write actions ---------------------------------------------------
+
+/** Open a round for a piece. Author cannot open their own (contract enforces). */
+export async function openRound(
+  contentId: number,
+  topicSlug: string,
+  commitWindowSecs: number,
+  revealWindowSecs: number,
+  minStakeWei: bigint
+): Promise<number> {
+  const market = await marketWrite();
+  const tx = await market.openRound(
+    contentId,
+    topicHash(topicSlug),
+    commitWindowSecs,
+    revealWindowSecs,
+    minStakeWei
+  );
+  const receipt = await tx.wait();
+  // Pull the new round id from the RoundOpened event when available.
+  try {
+    const next: bigint = await marketRead().nextRound();
+    return Number(next) - 1;
+  } catch {
+    return receipt?.status === 1 ? 0 : -1;
+  }
+}
+
+/** Commit a hashed vote with stake; persists the salt locally for reveal. */
+export async function commitVote(
+  roundId: number,
+  choice: boolean,
+  stakeWei: bigint,
+  voter: string
+): Promise<void> {
+  const salt = randomSalt();
+  const commitment = hashCommitment(choice, salt, voter);
+  const market = await marketWrite();
+  const tx = await market.commitVote(roundId, commitment, { value: stakeWei });
+  await tx.wait();
+  // Only persist after the commit confirms, so we don't store a phantom salt.
+  saveCommit(roundId, voter, { choice, salt });
+}
+
+/** Reveal a previously committed vote using the stored salt. */
+export async function revealVote(
+  roundId: number,
+  voter: string
+): Promise<void> {
+  const stored = loadCommit(roundId, voter);
+  if (!stored) {
+    throw new Error(
+      "No saved vote found in this browser. The reveal needs the secret salt created at commit time."
+    );
+  }
+  const market = await marketWrite();
+  const tx = await market.revealVote(roundId, stored.choice, stored.salt);
+  await tx.wait();
+}
+
+/** Resolve a round after the reveal window (anyone may call). */
+export async function resolveRound(roundId: number): Promise<void> {
+  const market = await marketWrite();
+  const tx = await market.resolve(roundId);
+  await tx.wait();
+}
+
+/** Withdraw refund + reward after resolution. */
+export async function withdrawRound(roundId: number): Promise<void> {
+  const market = await marketWrite();
+  const tx = await market.withdraw(roundId);
+  await tx.wait();
 }
