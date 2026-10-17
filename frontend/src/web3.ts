@@ -515,7 +515,8 @@ export async function withdrawRound(roundId: number): Promise<void> {
 
 export interface UploadResult {
   key: string; // R2 object key
-  url: string; // public URL to the stored file (or key if no public base set)
+  url: string; // same-origin path served by the content Function (e.g. /content/<hash>.txt)
+  publicUrl?: string; // absolute r2.dev/custom-domain URL if PUBLIC_BASE_URL is set
   hash: string; // 0x-prefixed SHA-256 the server computed over the bytes
   size: number;
   contentType: string;
@@ -565,14 +566,6 @@ export async function uploadArticleText(
 
 // --- Reading stored content back -------------------------------------------
 
-// Public base for R2 objects, baked at build time. Used to turn a stored bare
-// key (e.g. "content/<hash>.txt") into a full URL. Falls back to same-origin.
-const PUBLIC_BASE =
-  (import.meta.env?.VITE_PUBLIC_BASE_URL as string | undefined)?.replace(
-    /\/$/,
-    ""
-  ) ?? "";
-
 /**
  * Turn a stored uri into something fetchable. Full http(s) urls pass through;
  * ipfs:// is routed through a public gateway; a bare R2 key gets the public
@@ -583,9 +576,9 @@ export function resolveContentUrl(uri: string): string | null {
   if (!u) return null;
   if (/^https?:\/\//i.test(u)) return u;
   if (/^ipfs:\/\//i.test(u)) return `https://ipfs.io/ipfs/${u.slice(7)}`;
-  if (u.startsWith("content/")) {
-    return PUBLIC_BASE ? `${PUBLIC_BASE}/${u}` : `/${u}`;
-  }
+  // Same-origin content path served by functions/content/[[path]].ts.
+  if (u.startsWith("/content/")) return u;
+  if (u.startsWith("content/")) return `/${u}`;
   // Unknown shape (e.g. a plain title typed as uri) — not fetchable.
   return null;
 }

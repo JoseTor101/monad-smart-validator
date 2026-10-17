@@ -99,8 +99,20 @@ export const onRequestPost: PagesFunction<Env> = async (ctx) => {
     return json({ error: `Upload failed: ${(err as Error).message}` }, 502);
   }
 
+  // Return a same-origin path served by functions/content/[[path]].ts. This
+  // works identically in local dev and production and doesn't depend on the
+  // bucket being publicly exposed. If PUBLIC_BASE_URL is set, also surface the
+  // absolute public URL for convenience, but the app stores the relative one.
+  const url = `/${key}`;
   const base = (env.PUBLIC_BASE_URL ?? "").replace(/\/$/, "");
-  const url = base ? `${base}/${key}` : key;
+  const publicUrl = base ? `${base}/${key}` : undefined;
 
-  return json({ key, url, hash: `0x${hashHex}`, size: fileSize, contentType: type });
+  return json({
+    key,
+    url,
+    publicUrl,
+    hash: `0x${hashHex}`,
+    size: fileSize,
+    contentType: type,
+  });
 };
