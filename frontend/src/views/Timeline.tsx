@@ -1,11 +1,38 @@
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { TOPICS } from "../config";
+import { TOPICS, isDeployed, REGISTRY_ADDRESS } from "../config";
 import { SAMPLE_POSTS, type SamplePost } from "../sampleData";
 import { Fingerprint, RepMeter, Seal } from "../components";
-import { shortAddr, timeAgo } from "../web3";
+import { fetchAllContent, shortAddr, timeAgo, type ChainContent } from "../web3";
 
 function topicLabel(slug: string): string {
   return TOPICS.find((t) => t.id === slug)?.label ?? slug;
+}
+
+// A registered item becomes a post. On-chain we only have hash / uri / kind /
+// time / versions — no title, description, topic, or reputation yet. We show
+// the uri as the heading (that's the label the author supplied) and mark the
+// piece "pending" until validation reads are wired up.
+function toPost(c: ChainContent): SamplePost {
+  const label = c.uri?.trim() || `Untitled #${c.id}`;
+  return {
+    id: c.id,
+    title: label,
+    description:
+      c.parentId > 0
+        ? `Derivative of #${c.parentId}. Fingerprint sealed on Monad; awaiting community validation.`
+        : "Fingerprint, author and timestamp sealed on Monad. Awaiting community validation.",
+    author: c.author,
+    topic: "", // no on-chain topic field yet
+    kind: c.kind,
+    hash: c.hash,
+    createdAt: c.createdAt,
+    versions: c.versions,
+    reputation: 0,
+    seal: "pending",
+    yesWeight: 0,
+    noWeight: 0,
+  };
 }
 
 export function Timeline({
@@ -17,9 +44,38 @@ export function Timeline({
   onClearFilter: () => void;
   onValidate: (post: SamplePost) => void;
 }) {
-  const posts = filter
-    ? SAMPLE_POSTS.filter((p) => p.topic === filter)
-    : SAMPLE_POSTS;
+  const deployed = isDeployed(REGISTRY_ADDRESS);
+  const [chain, setChain] = useState<SamplePost[] | null>(null);
+  const [loading, setLoading] = useState(deployed);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!deployed) return;
+    let cancelled = false;
+    setLoading(true);
+    fetchAllContent()
+      .then((items) => {
+        if (cancelled) return;
+        setChain(items.map(toPost));
+        setError(null);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setError("Couldn't read registrations from the chain.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [deployed]);
+
+  // Prefer real on-chain content; fall back to sample data only when the
+  // registry is empty or undeployed, so the demo still has something to show.
+  const usingChain = deployed && chain !== null && chain.length > 0;
+  const base = usingChain ? chain! : SAMPLE_POSTS;
+  const posts = filter ? base.filter((p) => p.topic === filter) : base;
 
   return (
     <section>
@@ -40,6 +96,17 @@ export function Timeline({
         </div>
       </div>
 
+      {loading && (
+        <div className="notice info">Reading registrations from Monad…</div>
+      )}
+      {error && <div className="notice risk">{error}</div>}
+      {deployed && !loading && !usingChain && !error && (
+        <div className="notice info">
+          No on-chain registrations yet — showing sample content. Register a
+          piece and it appears here.
+        </div>
+      )}
+
       <div className="timeline">
         <AnimatePresence mode="popLayout">
           {posts.map((p, i) => (
@@ -55,7 +122,9 @@ export function Timeline({
               <div className="post-head">
                 <div>
                   <div className="meta" style={{ marginBottom: 6 }}>
-                    {topicLabel(p.topic)} · {p.kind} · v{p.versions}
+                    {[p.topic ? topicLabel(p.topic) : null, p.kind, `v${p.versions}`]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
                   <h3>{p.title}</h3>
                 </div>
@@ -66,9 +135,11 @@ export function Timeline({
 
               <div className="post-foot">
                 <Fingerprint hash={p.hash} verified={p.seal === "verified"} />
-                <div style={{ minWidth: 150, flex: "0 1 200px" }}>
-                  <RepMeter score={p.reputation} />
-                </div>
+                {p.reputation > 0 && (
+                  <div style={{ minWidth: 150, flex: "0 1 200px" }}>
+                    <RepMeter score={p.reputation} />
+                  </div>
+                )}
                 <span className="meta">
                   {shortAddr(p.author)} · {timeAgo(p.createdAt)}
                 </span>

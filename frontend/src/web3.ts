@@ -7,6 +7,7 @@ import {
   type Eip1193Provider,
 } from "ethers";
 import {
+  Kind,
   MARKET_ABI,
   MARKET_ADDRESS,
   MONAD_TESTNET,
@@ -14,6 +15,7 @@ import {
   REGISTRY_ADDRESS,
   REPUTATION_ABI,
   REPUTATION_ADDRESS,
+  isDeployed,
 } from "./config";
 
 export const hasWallet = () =>
@@ -86,6 +88,68 @@ export async function registryWrite() {
 export async function marketWrite() {
   const signer = await walletProvider().getSigner();
   return new Contract(MARKET_ADDRESS, MARKET_ABI, signer);
+}
+
+// --- Reading registered content --------------------------------------------
+
+export interface ChainContent {
+  id: number;
+  author: string;
+  kind: "Article" | "Image";
+  createdAt: number; // unix seconds
+  parentId: number;
+  versions: number;
+  hash: string; // latest content hash
+  uri: string; // latest version uri (user-supplied label/location)
+}
+
+/**
+ * Read every registered item from ContentRegistry, newest first. Returns an
+ * empty array when the registry isn't deployed or holds nothing yet. Reads are
+ * best-effort per id so one bad record doesn't sink the whole list.
+ */
+export async function fetchAllContent(): Promise<ChainContent[]> {
+  if (!isDeployed(REGISTRY_ADDRESS)) return [];
+  const registry = registryRead();
+
+  // ids run 1 .. nextId-1 (nextId starts at 1, so nextId-1 == item count).
+  const next: bigint = await registry.nextId();
+  const count = Number(next) - 1;
+  if (!Number.isFinite(count) || count <= 0) return [];
+
+  const ids = Array.from({ length: count }, (_, i) => i + 1);
+  const results = await Promise.all(
+    ids.map(async (id): Promise<ChainContent | null> => {
+      try {
+        const [author, kind, createdAt, parentId, numVersions] =
+          await registry.getContent(id);
+        const vcount = Number(numVersions);
+        const latest =
+          vcount > 0 ? await registry.getVersion(id, vcount - 1) : null;
+        const hash: string = latest
+          ? latest.contentHash ?? latest[0]
+          : await registry.latestHash(id);
+        const uri: string = latest ? latest.uri ?? latest[1] : "";
+        return {
+          id,
+          author,
+          kind: Number(kind) === Kind.Image ? "Image" : "Article",
+          createdAt: Number(createdAt),
+          parentId: Number(parentId),
+          versions: vcount,
+          hash,
+          uri,
+        };
+      } catch (err) {
+        console.warn(`Skipping content #${id}:`, err);
+        return null;
+      }
+    })
+  );
+
+  return results
+    .filter((c): c is ChainContent => c !== null)
+    .sort((a, b) => b.createdAt - a.createdAt || b.id - a.id);
 }
 
 // --- Hashing ----------------------------------------------------------------
