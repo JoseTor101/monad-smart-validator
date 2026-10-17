@@ -109,13 +109,36 @@ after adding them.
 
 ### Local testing
 
-Pages Functions don't run under plain `vite dev`. To exercise `/api/upload`
-locally, build then run Wrangler's Pages dev with a local bucket:
+Pages Functions do **not** run under `npm run dev` (plain Vite) — `/api/upload`
+will 404 there. Use Wrangler's Pages dev server instead, which serves the built
+site + the function together. Two convenience scripts (run from `frontend/`):
 
 ```bash
-cd frontend
-npm run build
-npx wrangler pages dev dist --r2 CONTENT_BUCKET
+# Against the REAL bucket (needs: npx wrangler login once). Closest to prod.
+npm run preview:pages
+
+# Fully local SIMULATED bucket (files land in .wrangler/, nothing hits CF).
+npm run preview:pages:local
 ```
 
-Otherwise test against the deployed Pages preview/production.
+Both build first, then serve on http://localhost:8788.
+
+For the returned upload URL to be clickable against the real bucket, set the
+public base for the session before running:
+
+```powershell
+# PowerShell
+$env:PUBLIC_BASE_URL="https://pub-a4dfb48ef85d4cc4b37460effc162202.r2.dev"
+npm run preview:pages
+```
+
+```bash
+# bash/zsh
+PUBLIC_BASE_URL="https://pub-a4dfb48ef85d4cc4b37460effc162202.r2.dev" npm run preview:pages
+```
+
+Notes:
+- `npm run dev` still works for pure UI work; uploads just won't function there.
+- Editing source requires a rebuild (the scripts rebuild on each run).
+- On-chain actions (wallet, register, validate) work the same locally since they
+  use Monad's public RPC.
