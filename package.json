@@ -1,0 +1,17 @@
+{
+  "name": "monad-hackaton",
+  "version": "1.0.0",
+  "description": "A Monad testnet dApp starter: Solidity smart contracts (Hardhat) + a React + TypeScript frontend.",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.ts --network monadTestnet",
+    "node": "hardhat node"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.22.10",
+    "typescript": "^5.5.4",
+    "ts-node": "^10.9.2"
+  }
+}

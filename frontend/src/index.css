@@ -1,0 +1,162 @@
+:root {
+  --purple: #7c3aed;
+  --purple-dark: #5b21b6;
+  --bg: #0f0f17;
+  --card: #1a1a2e;
+  --text: #e8e8f0;
+  --muted: #9a9ab0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: radial-gradient(1200px 600px at 50% -10%, #1e1b3a, var(--bg));
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 48px 20px;
+  text-align: center;
+}
+
+h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.subtitle {
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid #2a2a45;
+  border-radius: 16px;
+  padding: 28px;
+  margin: 24px 0;
+}
+
+.value-display {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--purple);
+  word-break: break-word;
+}
+
+.value-label {
+  color: var(--muted);
+  margin-top: 8px;
+  font-size: 0.9rem;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid #33334f;
+  background: #232338;
+  color: var(--text);
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 1rem;
+  transition: transform 0.05s ease, background 0.2s ease;
+}
+
+button:hover:not(:disabled) {
+  background: #2c2c44;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--purple);
+  border-color: var(--purple);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--purple-dark);
+}
+
+button.ghost {
+  background: transparent;
+  margin-top: 14px;
+}
+
+.set-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.set-row input {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #33334f;
+  background: #14141f;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.account {
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.status {
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #14141f;
+  border: 1px solid #2a2a45;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.banner {
+  padding: 12px;
+  border-radius: 10px;
+  margin: 12px 0;
+  font-size: 0.9rem;
+}
+
+.banner.error {
+  background: #3a1420;
+  border: 1px solid #7a2540;
+}
+
+.banner.warn {
+  background: #3a2f14;
+  border: 1px solid #7a5f25;
+}
+
+code {
+  background: #14141f;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.85em;
+}
+
+a {
+  color: var(--purple);
+}
+
+footer {
+  margin-top: 32px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
