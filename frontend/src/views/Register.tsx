@@ -77,14 +77,27 @@ export function Register({ account }: { account: string | null }) {
     try {
       setBusy(true);
 
+      // 0) Duplicate guard FIRST — the contract keys on the content hash, not
+      //    the title. Renaming an already-registered file won't make it new, so
+      //    check before spending any R2 writes or a wallet prompt.
+      if (await registryIsRegistered(hash)) {
+        setStatus(
+          mode === "image"
+            ? "This exact image is already registered on-chain (the fingerprint is the image, not the title). Pick a different image to register a new piece."
+            : "This exact text is already registered on-chain. Change the content to register a new piece."
+        );
+        setBusy(false);
+        return;
+      }
+
       // 1) Upload the content to R2, then a small metadata JSON (title, field,
       //    content pointer). The on-chain uri points at the metadata so views
       //    can show the real title — the contract itself stores no title.
       //    If a uri was pasted manually (e.g. ipfs://), skip the upload.
-      let finalUri = uri;
+      let finalUri = uri.trim();
       const hasContentToUpload =
         (mode === "article" && body.trim()) || (mode === "image" && imageFile);
-      const uriLooksExternal = /^(https?:|ipfs:)/i.test(uri.trim());
+      const uriLooksExternal = /^(https?:|ipfs:)/i.test(finalUri);
 
       if (hasContentToUpload && !uriLooksExternal) {
         setStatus("Uploading content to storage…");
@@ -105,8 +118,7 @@ export function Register({ account }: { account: string | null }) {
             contentUrl: content.url,
             contentHash: content.hash,
           });
-          finalUri = meta.url; // store the metadata path on-chain
-          setUri(finalUri);
+          finalUri = meta.url; // store the metadata path on-chain (local only)
         } catch (err) {
           console.error(err);
           setStatus(
@@ -118,17 +130,6 @@ export function Register({ account }: { account: string | null }) {
       }
 
       // 2) Record the fingerprint + uri on-chain (the one wallet transaction).
-      // Pre-check the duplicate guard so we give a clear message instead of a
-      // generic revert.
-      const alreadyRegistered = await registryIsRegistered(hash);
-      if (alreadyRegistered) {
-        setStatus(
-          "This exact content is already registered on-chain. Change the content (even slightly) to register a new piece, or edit the existing one to add a version."
-        );
-        setBusy(false);
-        return;
-      }
-
       setStatus("Registering: confirm in your wallet…");
       const registry = await registryWrite();
       const kind = mode === "article" ? Kind.Article : Kind.Image;
