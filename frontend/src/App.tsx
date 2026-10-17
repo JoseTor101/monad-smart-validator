@@ -1,8 +1,23 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { formatEther, parseEther } from "ethers";
 import { useWallet } from "./useWallet";
 import { useTheme } from "./useTheme";
-import { shortAddr } from "./web3";
+import {
+  Phase,
+  commitVote,
+  findRoundFor,
+  getMyVote,
+  marketDeployed,
+  openRound,
+  resolveRound,
+  revealVote,
+  shortAddr,
+  withdrawRound,
+  type MyVote,
+  type RoundState,
+} from "./web3";
+import { TOPICS } from "./config";
 import { Fingerprint, Seal } from "./components";
 import { Discovery } from "./views/Discovery";
 import { Timeline } from "./views/Timeline";
@@ -203,7 +218,7 @@ function Hero({ onStart }: { onStart: () => void }) {
   );
 }
 
-/* --- Validate modal: commit–reveal explained in plain language ----------- */
+/* --- Validate modal: real commit–reveal against ValidationMarket --------- */
 
 function ValidateModal({
   post,
@@ -214,10 +229,6 @@ function ValidateModal({
   account: string | null;
   onClose: () => void;
 }) {
-  const [choice, setChoice] = useState<boolean | null>(null);
-  const [stake, setStake] = useState("0.1");
-  const disputed = post.seal === "disputed";
-
   return (
     <motion.div
       className="overlay"
@@ -235,9 +246,7 @@ function ValidateModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <h3 style={{ fontSize: "1.25rem" }}>
-            {disputed ? "Dispute in progress" : "Validate this piece"}
-          </h3>
+          <h3 style={{ fontSize: "1.25rem" }}>Validate this piece</h3>
           <button className="btn btn-ghost" onClick={onClose} aria-label="Close">
             ✕
           </button>
@@ -246,77 +255,347 @@ function ValidateModal({
         <p className="muted" style={{ fontSize: "0.9rem", marginTop: 6 }}>
           {post.title}
         </p>
-
         <div style={{ margin: "16px 0" }}>
           <Fingerprint hash={post.hash} verified={post.seal === "verified"} />
         </div>
 
-        {disputed ? (
-          <div className="notice risk">
-            An escalated round is open at double the original stake. Majority by
-            staked weight settles it; the losing side is slashed.
+        <ValidateFlow post={post} account={account} />
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// Window lengths kept short so a hackathon demo can go commit -> reveal ->
+// resolve within minutes rather than days.
+const COMMIT_WINDOW = 180; // 3 min
+const REVEAL_WINDOW = 180; // 3 min
+
+function ValidateFlow({
+  post,
+  account,
+}: {
+  post: SamplePost;
+  account: string | null;
+}) {
+  // Sample posts (demo seed) have a non-empty topic and seeded reputation;
+  // real on-chain items come through with topic "" and reputation 0.
+  const sample = post.topic !== "" && post.reputation > 0;
+  const deployed = marketDeployed();
+
+  // For on-chain posts the topic isn't stored on-chain, so the validator picks
+  // which field they're judging under (reputation is scoped per field).
+  const [topic, setTopic] = useState<string>(post.topic || TOPICS[0].id);
+  const [round, setRound] = useState<RoundState | null>(null);
+  const [myVote, setMyVote] = useState<MyVote | null>(null);
+  const [choice, setChoice] = useState<boolean | null>(null);
+  const [stake, setStake] = useState("0.01");
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string>("");
+  const [loading, setLoading] = useState(deployed && !sample);
+  const [, force] = useState(0);
+
+  const refresh = useCallback(async () => {
+    if (!deployed || sample) return;
+    const r = await findRoundFor(post.id, topic);
+    setRound(r);
+    if (r && account) setMyVote(await getMyVote(r.roundId, account));
+    else setMyVote(null);
+  }, [deployed, sample, post.id, topic, account]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(deployed && !sample);
+    refresh().finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [refresh, deployed, sample]);
+
+  // Tick so deadline-based phase labels stay current while the modal is open.
+  useEffect(() => {
+    const t = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (sample) {
+    return (
+      <p className="notice info" style={{ fontSize: "0.85rem" }}>
+        This is sample content for the demo. Register a real piece (or pick one
+        from the chain) to open a live validation round.
+      </p>
+    );
+  }
+  if (!deployed) {
+    return (
+      <p className="notice warn" style={{ fontSize: "0.85rem" }}>
+        The ValidationMarket contract isn't deployed, so validation is
+        unavailable.
+      </p>
+    );
+  }
+  if (!account) {
+    return (
+      <p className="notice info" style={{ fontSize: "0.85rem" }}>
+        Connect your wallet to open or join a validation round.
+      </p>
+    );
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const isAuthor =
+    !!account &&
+    !!post.author &&
+    account.toLowerCase() === post.author.toLowerCase();
+
+  async function run(label: string, fn: () => Promise<void>) {
+    try {
+      setBusy(true);
+      setStatus(`${label}: confirm in your wallet...`);
+      await fn();
+      setStatus(`${label}: confirmed.`);
+      await refresh();
+    } catch (err) {
+      console.error(err);
+      const msg =
+        (err as { shortMessage?: string })?.shortMessage ??
+        (err as Error)?.message ??
+        "rejected";
+      setStatus(`${label} failed: ${msg}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loading) {
+    return <p className="notice info">Reading the round from Monad...</p>;
+  }
+
+  // --- No round yet: offer to open one (author can't) ----------------------
+  if (!round) {
+    return (
+      <>
+        <p className="muted" style={{ fontSize: "0.85rem" }}>
+          No validation round is open for this piece yet. Opening one starts a{" "}
+          {COMMIT_WINDOW / 60}-minute commit window, then a{" "}
+          {REVEAL_WINDOW / 60}-minute reveal window.
+        </p>
+        <label className="field" style={{ marginTop: 14 }}>
+          <span>Field (reputation scope)</span>
+          <select value={topic} onChange={(e) => setTopic(e.target.value)}>
+            {TOPICS.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Minimum stake (MON)</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={stake}
+            onChange={(e) => setStake(e.target.value)}
+          />
+        </label>
+        {isAuthor && (
+          <div className="notice warn" style={{ fontSize: "0.8rem" }}>
+            You're the author, so the contract won't let you open a round on your
+            own content.
           </div>
-        ) : (
-          <>
-            <p className="muted" style={{ fontSize: "0.85rem" }}>
-              Your vote is hidden until the reveal phase (commit–reveal), so no
-              one can copy the leader or buy a visible vote. Stake backs your
-              judgement — vote with the outcome and you earn, against it and
-              you're slashed.
-            </p>
-
-            <div className="row" style={{ gap: 10, margin: "16px 0" }}>
-              <button
-                className={`btn${choice === true ? " btn-teal" : ""}`}
-                onClick={() => setChoice(true)}
-                style={{ flex: 1 }}
-              >
-                Original / true
-              </button>
-              <button
-                className={`btn${choice === false ? " btn-primary" : ""}`}
-                onClick={() => setChoice(false)}
-                style={{ flex: 1 }}
-              >
-                Not original
-              </button>
-            </div>
-
-            <label className="field">
-              <span>Stake (MON)</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={stake}
-                onChange={(e) => setStake(e.target.value)}
-              />
-            </label>
-          </>
         )}
-
         <button
           className="btn btn-primary"
           style={{ width: "100%" }}
-          disabled={!account || (!disputed && choice === null)}
-          onClick={onClose}
+          disabled={busy || isAuthor || !(Number(stake) > 0)}
+          onClick={() =>
+            run("Open round", () =>
+              openRound(
+                post.id,
+                topic,
+                COMMIT_WINDOW,
+                REVEAL_WINDOW,
+                parseEther(stake || "0")
+              ).then(() => undefined)
+            )
+          }
         >
-          {!account
-            ? "Connect wallet to continue"
-            : disputed
-            ? "Join the dispute"
-            : "Commit vote"}
+          {busy ? "Working..." : "Open validation round"}
         </button>
+        {status && <div className="notice info">{status}</div>}
+      </>
+    );
+  }
 
-        <p
-          className="muted"
-          style={{ fontSize: "0.75rem", marginTop: 12, textAlign: "center" }}
-        >
-          Preview: wiring to the ValidationMarket contract activates once
-          deployed.
+  // --- A round exists: show phase-appropriate action -----------------------
+  const inCommit = round.phase === Phase.Commit && now < round.commitDeadline;
+  const commitOver = now >= round.commitDeadline;
+  const inReveal =
+    (round.phase === Phase.Reveal ||
+      (round.phase === Phase.Commit && commitOver)) &&
+    now < round.revealDeadline;
+  const revealOver = now >= round.revealDeadline;
+  const resolved = round.phase === Phase.Resolved;
+
+  return (
+    <>
+      <div className="notice info" style={{ fontSize: "0.8rem" }}>
+        Round #{round.roundId} · min stake {formatEther(round.minStake)} MON ·{" "}
+        {resolved
+          ? `resolved: ${round.outcome ? "original" : "not original"}`
+          : inCommit
+          ? `commit closes ${new Date(round.commitDeadline * 1000).toLocaleTimeString()}`
+          : inReveal
+          ? `reveal closes ${new Date(round.revealDeadline * 1000).toLocaleTimeString()}`
+          : revealOver
+          ? "reveal window over - ready to resolve"
+          : "-"}
+      </div>
+
+      {inCommit && !myVote?.committed && (
+        <>
+          <p className="muted" style={{ fontSize: "0.85rem" }}>
+            Your vote is hidden until reveal (commit-reveal), so nobody can copy
+            or buy it. Stake backs your judgement: win with the majority and you
+            earn the slashed losing stake; lose and you're slashed.
+          </p>
+          <div className="row" style={{ gap: 10, margin: "16px 0" }}>
+            <button
+              className={`btn${choice === true ? " btn-teal" : ""}`}
+              onClick={() => setChoice(true)}
+              style={{ flex: 1 }}
+            >
+              Original / true
+            </button>
+            <button
+              className={`btn${choice === false ? " btn-primary" : ""}`}
+              onClick={() => setChoice(false)}
+              style={{ flex: 1 }}
+            >
+              Not original
+            </button>
+          </div>
+          <label className="field">
+            <span>Stake (MON) · min {formatEther(round.minStake)}</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={stake}
+              onChange={(e) => setStake(e.target.value)}
+            />
+          </label>
+          <button
+            className="btn btn-primary"
+            style={{ width: "100%" }}
+            disabled={
+              busy || choice === null || parseEther(stake || "0") < round.minStake
+            }
+            onClick={() =>
+              run("Commit vote", () =>
+                commitVote(
+                  round.roundId,
+                  choice!,
+                  parseEther(stake || "0"),
+                  account!
+                )
+              )
+            }
+          >
+            {busy ? "Working..." : "Commit vote"}
+          </button>
+        </>
+      )}
+
+      {inCommit && myVote?.committed && (
+        <p className="notice info" style={{ fontSize: "0.85rem" }}>
+          Your vote is committed and staked ({formatEther(myVote.stake)} MON).
+          Come back after the commit window to reveal it. Keep using this
+          browser; the secret salt needed to reveal is stored here.
         </p>
-      </motion.div>
-    </motion.div>
+      )}
+
+      {inReveal && myVote?.committed && !myVote.revealed && (
+        <>
+          <p className="muted" style={{ fontSize: "0.85rem" }}>
+            Reveal phase. Submit your hidden vote so it counts. If you don't
+            reveal, your stake is forfeited.
+          </p>
+          <button
+            className="btn btn-primary"
+            style={{ width: "100%" }}
+            disabled={busy}
+            onClick={() =>
+              run("Reveal vote", () => revealVote(round.roundId, account!))
+            }
+          >
+            {busy ? "Working..." : "Reveal my vote"}
+          </button>
+        </>
+      )}
+
+      {inReveal && !myVote?.committed && (
+        <p className="notice info" style={{ fontSize: "0.85rem" }}>
+          This round is in its reveal phase, so new votes can't be committed.
+        </p>
+      )}
+
+      {revealOver && !resolved && (
+        <>
+          <p className="muted" style={{ fontSize: "0.85rem" }}>
+            The reveal window has closed. Anyone can resolve the round to tally
+            the result and adjust reputation.
+          </p>
+          <button
+            className="btn btn-primary"
+            style={{ width: "100%" }}
+            disabled={busy}
+            onClick={() =>
+              run("Resolve round", () => resolveRound(round.roundId))
+            }
+          >
+            {busy ? "Working..." : "Resolve round"}
+          </button>
+        </>
+      )}
+
+      {resolved && (
+        <>
+          <div
+            className={`seal ${round.outcome ? "verified" : "disputed"}`}
+            style={{ margin: "4px 0 14px" }}
+          >
+            {round.outcome ? "Verified original" : "Voted not original"}
+          </div>
+          <p className="muted" style={{ fontSize: "0.82rem" }}>
+            Yes weight {formatEther(round.yesWeight)} · No weight{" "}
+            {formatEther(round.noWeight)} MON.
+          </p>
+          {myVote?.committed && myVote.revealed && !myVote.claimed && (
+            <button
+              className="btn btn-primary"
+              style={{ width: "100%", marginTop: 12 }}
+              disabled={busy}
+              onClick={() =>
+                run("Withdraw", () => withdrawRound(round.roundId))
+              }
+            >
+              {busy ? "Working..." : "Withdraw stake + reward"}
+            </button>
+          )}
+          {myVote?.claimed && (
+            <p className="notice info" style={{ fontSize: "0.82rem" }}>
+              You've already withdrawn from this round.
+            </p>
+          )}
+        </>
+      )}
+
+      {status && <div className="notice info">{status}</div>}
+    </>
   );
 }
 
