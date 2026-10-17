@@ -45,6 +45,8 @@ export function Profile({
   const [data, setData] = useState<ChainProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Local nudge so the user can force a re-read (RPC can lag just after a tx).
+  const [localRefresh, setLocalRefresh] = useState(0);
 
   useEffect(() => {
     if (!account || !deployed) {
@@ -68,16 +70,29 @@ export function Profile({
     return () => {
       cancelled = true;
     };
-  }, [account, deployed, refreshKey]);
+  }, [account, deployed, refreshKey, localRefresh]);
 
   return (
     <section>
       <div className="section" style={{ marginTop: 8 }}>
-        <h2>Your standing</h2>
-        <p className="sub">
-          Reputation and registrations read straight from Monad. Every number
-          here traces back to a transaction anyone can audit.
-        </p>
+        <div className="row wrap" style={{ justifyContent: "space-between" }}>
+          <div>
+            <h2>Your standing</h2>
+            <p className="sub">
+              Reputation and registrations read straight from Monad. Every
+              number here traces back to a transaction anyone can audit.
+            </p>
+          </div>
+          {account && deployed && (
+            <button
+              className="btn btn-ghost"
+              onClick={() => setLocalRefresh((n) => n + 1)}
+              disabled={loading}
+            >
+              {loading ? "Refreshing…" : "↻ Refresh"}
+            </button>
+          )}
+        </div>
       </div>
 
       <motion.div

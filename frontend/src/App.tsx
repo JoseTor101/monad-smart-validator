@@ -311,6 +311,43 @@ function ValidateModal({
 const COMMIT_WINDOW = 60; // 1 min
 const REVEAL_WINDOW = 60; // 1 min
 
+// Visual lifecycle so validators don't stall mid-round: a round isn't finished
+// (and reputation doesn't move) until step 3, Resolve, is done.
+function RoundSteps({
+  active,
+  myVote,
+}: {
+  active: number;
+  myVote: MyVote | null;
+}) {
+  const steps = [
+    { n: 1, label: "Commit" },
+    { n: 2, label: "Reveal" },
+    { n: 3, label: "Resolve" },
+    { n: 4, label: "Done" },
+  ];
+  return (
+    <div className="round-steps" aria-label="Validation progress">
+      {steps.map((s, i) => {
+        const state =
+          s.n < active ? "done" : s.n === active ? "active" : "todo";
+        // Flag reveal step if this voter committed but hasn't revealed.
+        const needsReveal =
+          s.n === 2 && active === 2 && myVote?.committed && !myVote.revealed;
+        return (
+          <div key={s.n} className="row" style={{ gap: 0 }}>
+            <div className={`step ${state}${needsReveal ? " warn" : ""}`}>
+              <span className="step-dot">{s.n < active ? "✓" : s.n}</span>
+              <span className="step-label">{s.label}</span>
+            </div>
+            {i < steps.length - 1 && <span className="step-line" />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ValidateFlow({
   post,
   account,
@@ -484,8 +521,14 @@ function ValidateFlow({
   const revealOver = now >= round.revealDeadline;
   const resolved = round.phase === Phase.Resolved;
 
+  // Which lifecycle step is active, so the user always sees what's next and
+  // that a round isn't finished until it's resolved.
+  const step = resolved ? 4 : revealOver ? 3 : inReveal ? 2 : 1;
+
   return (
     <>
+      <RoundSteps active={step} myVote={myVote} />
+
       <div className="notice info" style={{ fontSize: "0.8rem" }}>
         Round #{round.roundId} · min stake {formatEther(round.minStake)} MON ·{" "}
         {resolved
@@ -495,8 +538,8 @@ function ValidateFlow({
           : inReveal
           ? `reveal closes ${new Date(round.revealDeadline * 1000).toLocaleTimeString()}`
           : revealOver
-          ? "reveal window over - ready to resolve"
-          : "-"}
+          ? "reveal window over — anyone can resolve it now"
+          : "—"}
       </div>
 
       {inCommit && !myVote?.committed && (

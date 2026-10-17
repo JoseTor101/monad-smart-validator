@@ -941,3 +941,56 @@ button {
 .txrow-click:hover {
   background: var(--surface-2);
 }
+
+/* --- Validation lifecycle steps (modal) ---------------------------------- */
+
+.round-steps {
+  display: flex;
+  align-items: center;
+  margin: 4px 0 14px;
+}
+.round-steps .step {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  white-space: nowrap;
+}
+.round-steps .step-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.round-steps .step.active {
+  color: var(--ink);
+}
+.round-steps .step.active .step-dot {
+  border-color: var(--violet);
+  background: var(--violet);
+  color: #fff;
+}
+.round-steps .step.done {
+  color: var(--verified-ink);
+}
+.round-steps .step.done .step-dot {
+  border-color: var(--teal);
+  color: var(--verified-ink);
+}
+.round-steps .step.warn .step-dot {
+  border-color: var(--warning);
+  background: var(--warning);
+  color: #241a00;
+}
+.round-steps .step-line {
+  width: 18px;
+  height: 1px;
+  background: var(--line-strong);
+  margin: 0 6px;
+}
