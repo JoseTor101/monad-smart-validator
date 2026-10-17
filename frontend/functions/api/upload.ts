@@ -23,7 +23,12 @@ interface Env {
 }
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-const ALLOWED_PREFIXES = ["image/", "text/", "application/pdf"];
+const ALLOWED_PREFIXES = [
+  "image/",
+  "text/",
+  "application/pdf",
+  "application/json", // content metadata (title/field/pointer)
+];
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
