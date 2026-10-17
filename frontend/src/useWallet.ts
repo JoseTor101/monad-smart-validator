@@ -34,6 +34,26 @@ export function useWallet(): WalletState {
     }
   }, [installed]);
 
+  // Restore the session on load: if the site is still authorized, eth_accounts
+  // returns the connected address WITHOUT prompting. This keeps the wallet
+  // "connected" across page reloads.
+  useEffect(() => {
+    const eth = window.ethereum;
+    if (!eth?.request) return;
+    let cancelled = false;
+    eth
+      .request({ method: "eth_accounts" })
+      .then((accounts) => {
+        if (!cancelled) setAccount((accounts as string[])?.[0] ?? null);
+      })
+      .catch(() => {
+        /* no authorized accounts; stay disconnected */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Reflect account changes made inside the wallet UI.
   useEffect(() => {
     const eth = window.ethereum;
