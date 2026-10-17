@@ -32,18 +32,19 @@ export enum Kind {
 // --- ABIs (human-readable form; only the members the frontend touches) ------
 
 export const REGISTRY_ABI = [
-  "function nextId() view returns (uint256)",
-  "function register(bytes32 contentHash, string uri, uint8 kind) returns (uint256)",
-  "function registerDerivative(bytes32 contentHash, string uri, uint8 kind, uint256 parentId) returns (uint256)",
-  "function update(uint256 id, bytes32 newHash, string newUri)",
-  "function getContent(uint256 id) view returns (address author, uint8 kind, uint256 createdAt, uint256 parentId, uint256 numVersions)",
+  "function register(bytes32 hash, string uri, uint8 kind) returns (uint256 id)",
+  "function update(uint256 id, bytes32 newHash, string newUri) returns (uint256 version)",
+  "function attest(uint256 id, uint256 version, bool support)",
+  "function lookup(bytes32 hash) view returns (bool found, uint256 id, uint256 version)",
+  "function getContent(uint256 id) view returns (address author, uint8 kind, uint256 versionCount)",
+  "function getVersion(uint256 id, uint256 version) view returns (bytes32 hash, string uri, uint64 timestamp, uint32 attestCount, uint32 disputeCount)",
   "function authorOf(uint256 id) view returns (address)",
   "function versionCount(uint256 id) view returns (uint256)",
-  "function getVersion(uint256 id, uint256 index) view returns (tuple(bytes32 contentHash, string uri, uint256 timestamp, address editor))",
   "function latestHash(uint256 id) view returns (bytes32)",
-  "function isRegistered(bytes32 contentHash) view returns (bool)",
-  "event ContentRegistered(uint256 indexed id, address indexed author, bytes32 indexed contentHash, uint8 kind, uint256 parentId)",
-  "event ContentUpdated(uint256 indexed id, uint256 version, bytes32 indexed newHash, address editor)",
+  "function hasVoted(uint256 id, uint256 version, address who) view returns (bool)",
+  "event Registered(uint256 indexed id, address indexed author, bytes32 hash, uint8 kind, string uri)",
+  "event Updated(uint256 indexed id, uint256 version, bytes32 hash, string uri)",
+  "event Attested(uint256 indexed id, uint256 version, address indexed voter, bool support)",
 ] as const;
 
 export const REPUTATION_ABI = [

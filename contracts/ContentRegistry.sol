@@ -124,6 +124,11 @@ contract ContentRegistry {
         return (v.hash, v.uri, v.timestamp, v.attestCount, v.disputeCount);
     }
 
+    /// @notice Author of a content id. Used by ValidationMarket so authors cannot validate their own work.
+    function authorOf(uint256 id) external view returns (address) {
+        return _existing(id).author;
+    }
+
     function versionCount(uint256 id) external view returns (uint256) {
         return _existing(id).versions.length;
     }
