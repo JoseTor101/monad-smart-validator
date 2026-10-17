@@ -97,6 +97,48 @@ export async function marketWrite() {
   return new Contract(MARKET_ADDRESS, MARKET_ABI, signer);
 }
 
+// --- RPC resilience helpers -------------------------------------------------
+// The public Monad testnet RPC rate-limits bursts, so reads must be throttled
+// and retried, or results come back partial/empty intermittently.
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Retry a flaky RPC call with exponential backoff. */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  attempts = 4,
+  baseDelayMs = 250
+): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) await sleep(baseDelayMs * 2 ** i);
+    }
+  }
+  throw lastErr;
+}
+
+/** Map over items with bounded concurrency so we don't flood the RPC. */
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const i = cursor++;
+      out[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
 // --- Reading registered content --------------------------------------------
 
 export interface ChainContent {
@@ -122,44 +164,46 @@ export async function fetchAllContent(): Promise<ChainContent[]> {
   const registry = registryRead();
 
   // ids run 1 .. nextId-1 (nextId starts at 1, so nextId-1 == item count).
-  const next: bigint = await registry.nextId();
+  const next: bigint = await withRetry(() => registry.nextId());
   const count = Number(next) - 1;
   if (!Number.isFinite(count) || count <= 0) return [];
 
   const ids = Array.from({ length: count }, (_, i) => i + 1);
-  const results = await Promise.all(
-    ids.map(async (id): Promise<ChainContent | null> => {
-      try {
-        const [author, kind, createdAt, parentId, numVersions] =
-          await registry.getContent(id);
-        const vcount = Number(numVersions);
-        const latest =
-          vcount > 0 ? await registry.getVersion(id, vcount - 1) : null;
-        const hash: string = latest
-          ? latest.contentHash ?? latest[0]
-          : await registry.latestHash(id);
-        const uri: string = latest ? latest.uri ?? latest[1] : "";
-        // If the uri points at a metadata JSON, pull the real title + the
-        // actual content path from it. Otherwise fall back to the raw uri.
-        const meta = await fetchMeta(uri);
-        return {
-          id,
-          author,
-          kind: Number(kind) === Kind.Image ? "Image" : "Article",
-          createdAt: Number(createdAt),
-          parentId: Number(parentId),
-          versions: vcount,
-          hash,
-          uri,
-          title: meta?.title,
-          contentUrl: meta?.contentUrl ?? uri,
-        };
-      } catch (err) {
-        console.warn(`Skipping content #${id}:`, err);
-        return null;
-      }
-    })
-  );
+  // Bounded concurrency + retry so RPC throttling doesn't drop items (which
+  // showed up as the count flickering between its real value and 0).
+  const results = await mapLimit(ids, 3, async (id): Promise<ChainContent | null> => {
+    try {
+      const [author, kind, createdAt, parentId, numVersions] = await withRetry(
+        () => registry.getContent(id)
+      );
+      const vcount = Number(numVersions);
+      const latest =
+        vcount > 0
+          ? await withRetry(() => registry.getVersion(id, vcount - 1))
+          : null;
+      const hash: string = latest
+        ? latest.contentHash ?? latest[0]
+        : await withRetry(() => registry.latestHash(id));
+      const uri: string = latest ? latest.uri ?? latest[1] : "";
+      // Metadata is an HTTP fetch (not RPC) and non-fatal; keep it best-effort.
+      const meta = await fetchMeta(uri);
+      return {
+        id,
+        author,
+        kind: Number(kind) === Kind.Image ? "Image" : "Article",
+        createdAt: Number(createdAt),
+        parentId: Number(parentId),
+        versions: vcount,
+        hash,
+        uri,
+        title: meta?.title,
+        contentUrl: meta?.contentUrl ?? uri,
+      };
+    } catch (err) {
+      console.warn(`Skipping content #${id}:`, err);
+      return null;
+    }
+  });
 
   return results
     .filter((c): c is ChainContent => c !== null)
@@ -237,16 +281,16 @@ export async function fetchProfile(account: string): Promise<ChainProfile> {
   let reputation: TopicReputation[] = [];
   if (isDeployed(REPUTATION_ADDRESS)) {
     const rep = reputationRead();
-    const scores = await Promise.all(
-      TOPICS.map(async (t) => {
-        try {
-          const raw: bigint = await rep.reputationOf(topicHash(t.id), account);
-          return { slug: t.id, label: t.label, score: Number(raw) };
-        } catch {
-          return { slug: t.id, label: t.label, score: 0 };
-        }
-      })
-    );
+    const scores = await mapLimit(TOPICS.slice(), 3, async (t) => {
+      try {
+        const raw: bigint = await withRetry(() =>
+          rep.reputationOf(topicHash(t.id), account)
+        );
+        return { slug: t.id, label: t.label, score: Number(raw) };
+      } catch {
+        return { slug: t.id, label: t.label, score: 0 };
+      }
+    });
     reputation = scores.filter((s) => s.score !== 0);
   }
 
@@ -378,6 +422,47 @@ export async function findRoundFor(
     console.warn("findRoundFor scan failed:", err);
   }
   return null;
+}
+
+/**
+ * Fetch every round once and return the latest round per contentId. Used to
+ * reflect real validation state in the Timeline without a scan per item.
+ * "Latest" = highest roundId for that content.
+ */
+export async function latestRoundsByContent(): Promise<Map<number, RoundState>> {
+  const out = new Map<number, RoundState>();
+  if (!marketDeployed()) return out;
+  try {
+    const next: bigint = await marketRead().nextRound();
+    const total = Number(next) - 1;
+    const ids = Array.from({ length: Math.max(0, total) }, (_, i) => i + 1);
+    const rounds = await Promise.all(ids.map((id) => getRound(id)));
+    for (const r of rounds) {
+      if (!r) continue;
+      const prev = out.get(r.contentId);
+      if (!prev || r.roundId > prev.roundId) out.set(r.contentId, r);
+    }
+  } catch (err) {
+    console.warn("latestRoundsByContent failed:", err);
+  }
+  return out;
+}
+
+export type ValidationSeal =
+  | "verified"
+  | "disputed"
+  | "contested"
+  | "pending";
+
+/** Map a round's phase + tally to the seal shown in the UI. */
+export function sealForRound(round: RoundState | null | undefined): ValidationSeal {
+  if (!round) return "pending";
+  if (round.phase === Phase.Resolved) {
+    return round.outcome ? "verified" : "disputed";
+  }
+  // An open round with revealed votes so far reads as "under review".
+  if (round.yesWeight > 0n || round.noWeight > 0n) return "contested";
+  return "pending";
 }
 
 /** This wallet's vote in a round. */
