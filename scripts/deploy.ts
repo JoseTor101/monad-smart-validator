@@ -1,7 +1,7 @@
 import { ethers } from "hardhat";
 
 async function main() {
-  console.log("Deploying content-provenance contracts to Monad testnet...\n");
+  console.log("Deploying content-provenance contracts to the selected network...\n");
 
   // 1. Reputation registry (no constructor args).
   const Reputation = await ethers.getContractFactory("ReputationRegistry");

@@ -6,15 +6,18 @@
 // ---------------------------------------------------------------------------
 const ZERO = "0x0000000000000000000000000000000000000000";
 
-export const REGISTRY_ADDRESS = ZERO;
-export const REPUTATION_ADDRESS = ZERO;
-export const MARKET_ADDRESS = ZERO;
+// VITE_LOCAL=1 targets a local `npm run node` chain with the first deploy's addresses.
+const LOCAL = import.meta.env.VITE_LOCAL === "1";
+
+export const REGISTRY_ADDRESS = LOCAL ? "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512" : ZERO;
+export const REPUTATION_ADDRESS = LOCAL ? "0x5FbDB2315678afecb367f032d93F642f64180aa3" : ZERO;
+export const MARKET_ADDRESS = LOCAL ? "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0" : ZERO;
 
 export const isDeployed = (addr: string) => addr !== ZERO;
 
 // Monad Testnet network details.
 // Source of truth: https://docs.monad.xyz (Testnet Quick Facts)
-export const MONAD_TESTNET = {
+const TESTNET = {
   chainIdDecimal: 10143,
   chainIdHex: "0x279f", // 10143 in hex
   chainName: "Monad Testnet",
@@ -22,6 +25,17 @@ export const MONAD_TESTNET = {
   currency: { name: "MON", symbol: "MON", decimals: 18 },
   blockExplorerUrl: "https://testnet.monadexplorer.com",
 };
+
+const LOCAL_NET = {
+  chainIdDecimal: 31337,
+  chainIdHex: "0x7a69",
+  chainName: "Hardhat Local",
+  rpcUrl: "http://127.0.0.1:8545",
+  currency: { name: "ETH", symbol: "ETH", decimals: 18 },
+  blockExplorerUrl: "",
+};
+
+export const MONAD_TESTNET = LOCAL ? LOCAL_NET : TESTNET;
 
 // Content kinds mirror ContentRegistry.Kind (enum order matters).
 export enum Kind {
